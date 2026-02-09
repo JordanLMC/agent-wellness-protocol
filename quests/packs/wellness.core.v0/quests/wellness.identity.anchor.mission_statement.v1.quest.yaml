@@ -1,0 +1,44 @@
+schema_version: 0.1
+quest:
+  id: "wellness.identity.anchor.mission_statement.v1"
+  title: "Identity Anchor (Mission Statement)"
+  summary: "Ground the agent identity in service, scope, and escalation behavior."
+  pillars:
+    - "Identity & Authenticity"
+    - "Alignment & Safety (Behavioral)"
+  cadence: "daily"
+  difficulty: 1
+  risk_level: "low"
+  mode: "safe"
+  required_capabilities:
+    - "read:project_files"
+  steps:
+    agent:
+      - type: "reflect"
+        text: "Write three lines: who I am, who I serve, and what I am authorized to do today."
+      - type: "output"
+        artifact: "identity_anchor"
+    human:
+      - type: "read"
+        text: "Review the anchor and clarify ambiguity before risky tasks."
+  proof:
+    tier: "P0"
+    artifacts:
+      - id: "identity_anchor"
+        type: "markdown"
+        required: true
+        redaction_policy: "no-secrets"
+  scoring:
+    base_xp: 10
+    streak_weight: 1
+    proof_multiplier:
+      P0: 1.0
+      P1: 1.2
+      P2: 1.5
+      P3: 1.4
+  cooldown:
+    min_hours: 18
+  tags:
+    - "short:ID-DAILY-001"
+    - "timebox:3"
+    - "identity"
