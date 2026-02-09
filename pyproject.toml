@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools==75.6.0", "wheel==0.45.1"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "clawspa"
+version = "0.1.0"
+description = "ClawSpa Agent Wellness System v0.1"
+readme = "README.md"
+requires-python = ">=3.11"
+license = {text = "Apache-2.0"}
+authors = [{name = "ClawSpa Project Team"}]
+dependencies = [
+  "PyYAML==6.0.2",
+  "jsonschema==4.23.0",
+  "fastapi==0.115.6",
+  "uvicorn==0.32.1",
+  "pydantic==2.10.4",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest==8.3.4",
+]
+
+[project.scripts]
+quest-lint = "quest_lint.cli:main"
+runner = "clawspa_runner.cli:main"
+clawspa-mcp = "clawspa_mcp.server:main"
+
+[tool.setuptools.packages.find]
+where = ["quests/tools/quest-lint/src", "runner/src", "mcp-server/src"]
+
+[tool.pytest.ini_options]
+addopts = "-q"
+testpaths = [
+  "quests/tools/quest-lint/tests",
+  "runner/tests",
+  "mcp-server/tests",
+]

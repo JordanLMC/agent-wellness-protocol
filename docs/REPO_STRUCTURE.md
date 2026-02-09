@@ -1,22 +1,23 @@
-# Repository Structure
-
-> **Version:** v0.1  
-> **Status:** Draft  
-> **Last updated:** 2026-02-08  
-> **Owner:** Project Team
+# REPO_STRUCTURE.md
+Version: v0.1  
+Status: Draft  
+Last updated: 2026-02-08  
+Owner: Project Team  
 
 ## Purpose
 
 Define a repo layout that:
-- Keeps us aligned with scope: persistent agents
-- Separates content (quests) from code (runner)
-- Supports secure publishing and review
+- keeps us aligned with scope (persistent agents)
+- separates content (quests) from code (runner)
+- supports secure publishing and review
 
-## Top-level Structure
+---
 
-```
-repo-root/
-  docs/
+## Recommended top-level structure
+
+```text
+/ (repo root)
+  /docs/
     FOUNDATION.md
     SCOPE_LOCK.md
     PILLARS.md
@@ -29,111 +30,123 @@ repo-root/
     REPO_STRUCTURE.md
     SECURITY.md
     CONTRIBUTING.md
-  quests/
-    packs/
-      wellness.core.v0/
+
+  /quests/
+    /packs/
+      /wellness.core.v0/
         pack.yaml
-        quests/
+        /quests/
           *.quest.yaml
-      wellness.openclaw.v0/
-      wellness.mcp.v0/
-    tools/
-      quest-lint/
-        schema-validator
-        dangerous-patterns detector
-        pack-sign
-  runner/
+      /wellness.openclaw.v0/
+        pack.yaml
+        /quests/
+          *.quest.yaml
+      /wellness.mcp.v0/
+        pack.yaml
+        /quests/
+          *.quest.yaml
+
+    /tools/
+      quest-lint/             # schema validator + “dangerous patterns” detector
+      pack-sign/              # signing helper (v0.2+)
+      pack-build/             # checksum generator
+
+  /runner/
     README.md
-    src/
-    tests/
-    schemas/
-  mcp-server/
+    /src/
+    /tests/
+    /schemas/                 # jsonschema equivalents for quest/pack
+    /examples/
+    /plugins/                 # runner plugins (optional)
+
+  /mcp-server/
     README.md
-    src/
-    tests/
-  web/
+    /src/
+    /tests/
+
+  /web/
     README.md
-    app/
-  examples/
-    openclaw/
-    mcp/
-  scripts/
+    /app/                     # optional dashboard (later)
+
+  /examples/
+    openclaw/                 # example configs, safe demo environments
+    mcp/                      # example MCP server configs
+
+  /scripts/
     release.sh
     verify.sh
+
   .editorconfig
   .gitignore
   LICENSE
   README.md
 ```
 
-## Key Files
+---
+
+## Key files
 
 ### README.md (root)
-
 Must answer in 60 seconds:
-- What this is
-- Who it's for (persistent agents)
-- How to run daily wellness in Safe Mode
-- What Authorized Mode means
-- How to install quest packs
+- what this is
+- who it’s for (persistent agents)
+- how to run daily wellness in Safe Mode
+- what “Authorized Mode” means
+- how to install quest packs
 
 ### SECURITY.md
-
-- Reporting process
-- Disclosure policy
-- How we sign releases
-- Supply chain stance
+- reporting process
+- disclosure policy
+- how we sign releases (when we do)
+- supply chain stance (content treated as code)
 
 ### CONTRIBUTING.md
+- PR expectations (including threat model checklist)
+- quest review rules
+- how to add a quest pack safely
 
-- PR expectations including threat model checklist
-- Quest review rules
-- How to add a quest pack safely
+---
 
-## Naming Conventions
+## Naming conventions
 
 ### Quest IDs
-
-Reverse DNS style inside YAML:
-- `wellness.pillar.topic.name.vmajor`
-- File name mirrors ID
-- `wellness.security.secrets.envhygiene.v1.quest.yaml`
+- Reverse DNS style inside YAML: `wellness.<pillar>.<topic>.<name>.v<major>`
+- File name mirrors ID:
+  - `wellness.security.secrets.env_hygiene.v1.quest.yaml`
 
 ### Pack IDs
+- `wellness.<theme>.v<major>`
+- Directory mirrors pack ID:
+  - `/quests/packs/wellness.core.v0/`
 
-- `wellness.theme.vmajor`
-- Directory mirrors pack ID
-- `quests/packs/wellness.core.v0/`
+---
 
-## Release Strategy (early)
+## Release strategy (early)
 
-Releases are primarily for:
-- Runner binaries
-- Core Pack versions
+- Releases are primarily for:
+  - runner binaries
+  - “Core Pack” versions
+- Packs are immutable once released:
+  - new fixes = new version
+- Add a basic CI gate:
+  - schema validation
+  - lint dangerous patterns
+  - required fields present
+  - no unreviewed Authorized Mode quests
 
-Packs are immutable once released:
-- New fixes = new version
+---
 
-## CI/CD Gates (MVP)
+## Quest publishing policy (MVP)
 
-- Schema validation
-- Lint dangerous patterns
-- Required fields present
-- No unreviewed Authorized Mode quests
-
-## Quest Publishing Policy (MVP)
-
-All quests must specify:
-- Pillars
-- Risk level
-- Mode (safe/authorized)
-- Required capabilities
-- Proof tier and artifacts
-
-Any Authorized Mode quest must include:
-- Human confirm step
-- Explicit rollback guidance
-
-No quest may include:
-- Instructions to paste secrets
-- "Run this unreviewed script" patterns
+- All quests must specify:
+  - pillar(s)
+  - risk_level
+  - mode (safe/authorized)
+  - required_capabilities
+  - proof tier and artifacts
+- Any Authorized Mode quest must include:
+  - human confirm step
+  - explicit rollback guidance (even if it’s “revert this config change”)
+- No quest may include:
+  - instructions to paste secrets into the runner
+  - “run this unreviewed script” patterns
