@@ -1,0 +1,22 @@
+packversion: "0.1"
+pack:
+  id: wellness.core.v0
+  title: "Core Wellness Pack"
+  publisher:
+    name: "Agent Wellness Project"
+    id: "org.agentwellness"
+    contact: "security@agentwellness.example"
+  version: "0.1.0"
+  license: "Apache-2.0"
+  created_at: "2026-02-08"
+quests:
+  # Quest files will be added in quests/ subdirectory
+  # - wellness.security.secrets.envhygiene.v1
+  # - wellness.identity.integrity.checksum.v1
+checksums:
+  algo: "sha256"
+  files: {}
+signing:
+  scheme: "none"
+  signature: null
+  publickey: null
