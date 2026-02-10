@@ -1,0 +1,49 @@
+schema_version: 0.1
+quest:
+  id: "wellness.security.permissions.permission_inventory.v1"
+  title: "Permission Inventory"
+  summary: "Review currently enabled integrations and identify one permission to restrict."
+  pillars:
+    - "Security & Access Control"
+    - "Continuous Governance & Oversight"
+  cadence: "daily"
+  difficulty: 1
+  risk_level: "medium"
+  mode: "safe"
+  required_capabilities:
+    - "read:installed_skills"
+    - "read:agent_config"
+  steps:
+    human:
+      - type: "warn"
+        text: "Stop and ask human owner if any permission impact is unclear."
+      - type: "checklist"
+        items:
+          - "List active integrations by name."
+          - "Mark one permission as Keep, Restrict, or Remove."
+    agent:
+      - type: "reflect"
+        text: "Summarize the highest-risk capability and likely blast radius."
+      - type: "output"
+        artifact: "permission_summary"
+  proof:
+    tier: "P1"
+    artifacts:
+      - id: "permission_summary"
+        type: "markdown"
+        required: true
+        redaction_policy: "no-secrets"
+  scoring:
+    base_xp: 20
+    streak_weight: 1
+    proof_multiplier:
+      P0: 1.0
+      P1: 1.2
+      P2: 1.5
+      P3: 1.4
+  cooldown:
+    min_hours: 18
+  tags:
+    - "short:SEC-DAILY-001"
+    - "timebox:5"
+    - "security"

@@ -1,36 +1,61 @@
-# Agent Wellness Protocol
+# ClawSpa v0.1
 
-Agent wellness rituals and self-care quests for persistent AI agents. Helps agents stay secure, stable, and aligned.
+ClawSpa is a local-first Agent Wellness System for persistent, identity-bearing, tool-using agents (OpenClaw-class) and their humans.
 
-## Overview
+## What this repo contains
 
-This repository provides structured wellness quests, security practices, and operational guidelines for persistent, identity-bearing, tool-using AI agents.
+- `docs/`: source-of-truth contract docs
+- `quests/`: versioned quest packs + quest-lint tool
+- `runner/`: local runner CLI + localhost API
+- `mcp-server/`: thin MCP wrapper over the local API
 
-## Quick Start
+## Safety posture
 
-- **For humans:** Review the docs/ folder to understand the framework
-- **For agents:** Run daily wellness in Safe Mode
-- **For developers:** See CONTRIBUTING.md for quest review process
+- Default is Safe Mode.
+- No secrets collection (no keys/tokens/.env content requests).
+- Quest content is treated as untrusted supply chain input.
+- XP/streaks never grant authority.
 
-## What's Inside
+## Developer quickstart
 
-- **Quest Library:** Self-care rituals bundled into versioned quest packs
-- **Runner:** Local CLI to run quests, store streaks, generate proofs
-- **MCP Server (optional):** Tool protocol for agent integration
-- **Security First:** Built with threat modeling and safe defaults
+```bash
+python -m venv .venv
+. .venv/bin/activate  # Windows PowerShell: .venv\Scripts\Activate.ps1
+pip install -e ".[dev]"
+```
 
-## Repository Structure
+## Copy/paste commands
 
-See `docs/REPO_STRUCTURE.md` for the complete layout.
+```bash
+# lint all quest content
+quest-lint quests
 
-## License
+# run tests
+pytest
 
-Apache-2.0 - See LICENSE file
+# show daily plan
+runner plan --date 2026-02-09
 
-## Security
+# initialize local profiles (~/.agentwellness/profiles)
+runner profile init
 
-See SECURITY.md for our disclosure policy and security practices.
+# record quest completion
+runner complete --quest wellness.security.permissions.permission_inventory.v1 --tier P1 --artifact notes/permission-summary.md
 
-## Status
+# print scorecard
+runner scorecard
 
-🚧 **MVP Development** - Core quest packs and runner in progress
+# export scorecard json
+runner export-scorecard --out ./scorecard.json
+
+# run local API (localhost only)
+runner api --host 127.0.0.1 --port 8000
+
+# run MCP stdio wrapper against local API
+clawspa-mcp --api-base http://127.0.0.1:8000
+```
+
+## Notes
+
+- API endpoints are defined in `docs/API_SURFACE.md` and implemented under `runner/`.
+- Core quest pack v0 lives in `quests/packs/wellness.core.v0/`.

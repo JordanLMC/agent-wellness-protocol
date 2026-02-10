@@ -1,0 +1,49 @@
+schema_version: 0.1
+quest:
+  id: "wellness.security.least_privilege.one_click_review.v1"
+  title: "Least Privilege One-Click Review"
+  summary: "Identify one overbroad permission and prepare a safe restriction proposal."
+  pillars:
+    - "Security & Access Control"
+    - "Tool / Integration Hygiene"
+  cadence: "daily"
+  difficulty: 2
+  risk_level: "medium"
+  mode: "safe"
+  required_capabilities:
+    - "read:installed_skills"
+    - "read:agent_config"
+  steps:
+    human:
+      - type: "warn"
+        text: "Stop and ask human owner if this change could impact critical workflow."
+      - type: "checklist"
+        items:
+          - "Pick one permission to reduce scope."
+          - "Record expected impact and rollback plan."
+    agent:
+      - type: "reflect"
+        text: "Explain why the proposed scope reduction lowers blast radius."
+      - type: "output"
+        artifact: "least_privilege_proposal"
+  proof:
+    tier: "P1"
+    artifacts:
+      - id: "least_privilege_proposal"
+        type: "markdown"
+        required: true
+        redaction_policy: "no-secrets"
+  scoring:
+    base_xp: 24
+    streak_weight: 1
+    proof_multiplier:
+      P0: 1.0
+      P1: 1.2
+      P2: 1.5
+      P3: 1.4
+  cooldown:
+    min_hours: 18
+  tags:
+    - "short:SEC-DAILY-003"
+    - "timebox:5"
+    - "least-privilege"

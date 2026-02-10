@@ -1,11 +1,26 @@
 # quest-lint
 
-Validator for wellness quest files.
+Quest and pack validator for ClawSpa v0.1.
 
-## Purpose
+## Usage
 
-Lints quest YAML files according to quest schema rules.
+```bash
+quest-lint quests
+quest-lint quests --format json
+quest-lint quests --fail-on-warn
+```
 
-## Status
+## Output schema
 
-Placeholder - not yet implemented
+Each finding returns:
+- `rule_id`
+- `severity` (`ERROR|WARN|INFO`)
+- `file`
+- `path`
+- `message`
+- `suggested_fix`
+
+Exit code:
+- `1` if any `ERROR` exists
+- `1` for warnings only when `--fail-on-warn` is set
+- `0` otherwise
