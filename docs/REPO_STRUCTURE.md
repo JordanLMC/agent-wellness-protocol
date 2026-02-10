@@ -41,6 +41,10 @@ Define a repo layout that:
         pack.yaml
         /quests/
           *.quest.yaml
+      /wellness.home_security.v0/
+        pack.yaml
+        /quests/
+          *.quest.yaml
       /wellness.openclaw.v0/
         pack.yaml
         /quests/
@@ -158,3 +162,7 @@ Must answer in 60 seconds:
 - No quest may include:
   - instructions to paste secrets into the runner
   - “run this unreviewed script” patterns
+
+Optional pack note:
+- `wellness.home_security.v0` is an optional Safe Mode posture pack for home environment checks.
+- It is not part of `CORE_PACK_V0` daily minimum selection logic.

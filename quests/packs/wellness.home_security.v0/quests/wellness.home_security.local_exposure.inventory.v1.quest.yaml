@@ -1,0 +1,50 @@
+schema_version: 0.1
+quest:
+  id: wellness.home_security.local_exposure.inventory.v1
+  title: Local Exposure Inventory (Non-Scanning)
+  summary: Build a connected-device posture inventory using router UI data only, with
+    count-based outcomes and no address lists.
+  pillars:
+  - Transparency & Auditability
+  - Continuous Governance & Oversight
+  cadence: weekly
+  difficulty: 2
+  risk_level: low
+  mode: safe
+  required_capabilities: []
+  steps:
+    human:
+    - type: read
+      text: Use router interface inventory views only, without scanning tools.
+    - type: checklist
+      items:
+      - Count currently connected devices.
+      - Flag unknown devices by count only.
+      - Note which device is the agent host by role description only.
+      - Record whether follow-up review is needed.
+    - type: output
+      artifact: local_exposure_summary
+    agent:
+    - type: reflect
+      text: Summarize counts and follow-up status without listing IP or hardware identifiers.
+  proof:
+    tier: P1
+    artifacts:
+    - id: local_exposure_summary
+      type: markdown
+      required: true
+      redaction_policy: no-secrets
+  scoring:
+    base_xp: 20
+    streak_weight: 1
+    proof_multiplier:
+      P0: 1.0
+      P1: 1.2
+      P2: 1.5
+      P3: 1.4
+  cooldown:
+    min_hours: 72
+  tags:
+  - short:HOME-SEC-003
+  - timebox:10
+  - home-security

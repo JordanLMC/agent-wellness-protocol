@@ -1,0 +1,52 @@
+schema_version: 0.1
+quest:
+  id: wellness.home_security.wifi.posture_check.v1
+  title: WiFi Posture Check
+  summary: Review home router posture settings using a safe checklist without running
+    scans or sharing network secrets.
+  pillars:
+  - Security & Access Control
+  - Privacy & Data Governance
+  cadence: weekly
+  difficulty: 2
+  risk_level: low
+  mode: safe
+  required_capabilities: []
+  steps:
+    human:
+    - type: read
+      text: Use your router settings interface and record posture outcomes only.
+    - type: checklist
+      items:
+      - Wireless security mode is WPA2 or WPA3.
+      - WPS is disabled.
+      - Router firmware is updated to the latest available version.
+      - Guest network is enabled for IoT devices where practical.
+      - Router admin password has been changed from default.
+      - Remote admin access is off unless intentionally required.
+    - type: output
+      artifact: wifi_posture_summary
+    agent:
+    - type: reflect
+      text: Summarize risk posture as pass, needs review, or follow-up.
+  proof:
+    tier: P1
+    artifacts:
+    - id: wifi_posture_summary
+      type: markdown
+      required: true
+      redaction_policy: no-secrets
+  scoring:
+    base_xp: 20
+    streak_weight: 1
+    proof_multiplier:
+      P0: 1.0
+      P1: 1.2
+      P2: 1.5
+      P3: 1.4
+  cooldown:
+    min_hours: 72
+  tags:
+  - short:HOME-SEC-001
+  - timebox:10
+  - home-security

@@ -1,0 +1,47 @@
+schema_version: 0.1
+quest:
+  id: wellness.home_security.bluetooth.hygiene_check.v1
+  title: Bluetooth Hygiene Check
+  summary: Perform a safe Bluetooth hygiene check focused on discoverability and trusted
+    pairing behavior.
+  pillars:
+  - Security & Access Control
+  cadence: weekly
+  difficulty: 1
+  risk_level: low
+  mode: safe
+  required_capabilities: []
+  steps:
+    human:
+    - type: checklist
+      items:
+      - Device discoverability is disabled when not pairing.
+      - Unknown or unused paired devices are removed.
+      - Bluetooth is disabled when not needed.
+      - Pairing is only performed with trusted nearby devices.
+    - type: output
+      artifact: bluetooth_hygiene_summary
+    agent:
+    - type: reflect
+      text: Record which hygiene items need follow-up and by when.
+  proof:
+    tier: P1
+    artifacts:
+    - id: bluetooth_hygiene_summary
+      type: markdown
+      required: true
+      redaction_policy: no-secrets
+  scoring:
+    base_xp: 15
+    streak_weight: 1
+    proof_multiplier:
+      P0: 1.0
+      P1: 1.2
+      P2: 1.5
+      P3: 1.4
+  cooldown:
+    min_hours: 72
+  tags:
+  - short:HOME-SEC-002
+  - timebox:8
+  - home-security

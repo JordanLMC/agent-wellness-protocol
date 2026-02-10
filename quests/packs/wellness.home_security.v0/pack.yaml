@@ -1,0 +1,25 @@
+pack_version: 0.1
+pack:
+  id: wellness.home_security.v0
+  title: Home Security Posture Pack
+  publisher:
+    name: Agent Wellness Project
+    id: org.agentwellness
+    contact: security@agentwellness.example
+  version: 0.1.0
+  license: Apache-2.0
+  created_at: "2026-02-10"
+  quests:
+    - wellness.home_security.wifi.posture_check.v1
+    - wellness.home_security.bluetooth.hygiene_check.v1
+    - wellness.home_security.local_exposure.inventory.v1
+  checksums:
+    algo: sha256
+    files:
+      quests/wellness.home_security.wifi.posture_check.v1.quest.yaml: 79383fa2e0d27f1026cf2093596f30625bd11e90484eb6baae9aaa800d415ea8
+      quests/wellness.home_security.bluetooth.hygiene_check.v1.quest.yaml: eb42dd93d7f37d8e36ac40432863ef9a7cb0bc5d43ce1e525dac75144b9ef578
+      quests/wellness.home_security.local_exposure.inventory.v1.quest.yaml: e7ac5444841903c9911b5d2b6bc325cae518f924dccd12429b1bd25bc45361bf
+  signing:
+    scheme: none
+    signature: null
+    public_key: null
