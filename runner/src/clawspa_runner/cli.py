@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from datetime import date
 from pathlib import Path
 
@@ -38,14 +39,18 @@ def _print_plan(plan: dict) -> None:
 def main() -> int:
     parser = argparse.ArgumentParser(description="ClawSpa runner CLI")
     sub = parser.add_subparsers(dest="command", required=True)
+    default_actor_id = os.environ.get("CLAWSPA_ACTOR_ID", "unknown")
 
     plan_cmd = sub.add_parser("plan", help="Generate or read daily plan")
     plan_cmd.add_argument("--date", default=date.today().isoformat(), help="Date in YYYY-MM-DD")
+    plan_cmd.add_argument("--actor-id", default=default_actor_id, help="Telemetry actor identifier")
 
     complete_cmd = sub.add_parser("complete", help="Record quest completion")
     complete_cmd.add_argument("--quest", required=True, help="Canonical quest ID")
     complete_cmd.add_argument("--tier", required=True, choices=["P0", "P1", "P2", "P3"])
     complete_cmd.add_argument("--artifact", required=True, help="Artifact path or summary reference")
+    complete_cmd.add_argument("--actor", default="human", choices=["human", "agent", "system"])
+    complete_cmd.add_argument("--actor-id", default=default_actor_id, help="Telemetry actor identifier")
 
     sub.add_parser("scorecard", help="Print current scorecard")
 
@@ -72,9 +77,11 @@ def main() -> int:
     cap_grant.add_argument("--ttl-seconds", type=int, default=3600)
     cap_grant.add_argument("--scope", default="manual")
     cap_grant.add_argument("--ticket", required=True, help="Single-use grant ticket token")
+    cap_grant.add_argument("--actor-id", default=default_actor_id, help="Telemetry actor identifier")
     cap_revoke = cap_sub.add_parser("revoke")
     cap_revoke.add_argument("--grant-id")
     cap_revoke.add_argument("--capability")
+    cap_revoke.add_argument("--actor-id", default=default_actor_id, help="Telemetry actor identifier")
 
     telemetry_cmd = sub.add_parser("telemetry", help="Telemetry operations")
     telemetry_sub = telemetry_cmd.add_subparsers(dest="telemetry_command", required=True)
@@ -85,17 +92,30 @@ def main() -> int:
     telemetry_export = telemetry_sub.add_parser("export", help="Export aggregated telemetry summary")
     telemetry_export.add_argument("--range", default="7d", help="Range window like 7d or 24h")
     telemetry_export.add_argument("--out", required=True, help="Output JSON path")
+    telemetry_export.add_argument("--actor-id", default=None, help="Optional actor id filter")
 
     args = parser.parse_args()
     service = _service()
 
     if args.command == "plan":
-        plan = service.get_daily_plan(date.fromisoformat(args.date), source="cli", actor="human")
+        plan = service.get_daily_plan(
+            date.fromisoformat(args.date),
+            source="cli",
+            actor="human",
+            actor_id=args.actor_id,
+        )
         _print_plan(plan)
         return 0
 
     if args.command == "complete":
-        result = service.complete_quest(args.quest, args.tier, args.artifact, source="cli")
+        result = service.complete_quest(
+            args.quest,
+            args.tier,
+            args.artifact,
+            actor_mode=args.actor,
+            source="cli",
+            actor_id=args.actor_id,
+        )
         print(json.dumps(result, indent=2))
         return 0
 
@@ -136,6 +156,7 @@ def main() -> int:
                 ticket_token=args.ticket,
                 source="cli",
                 actor="human",
+                actor_id=args.actor_id,
             )
             print(json.dumps(result, indent=2))
             return 0
@@ -145,6 +166,7 @@ def main() -> int:
                 capability=args.capability,
                 source="cli",
                 actor="human",
+                actor_id=args.actor_id,
             )
             print(json.dumps(result, indent=2))
             return 0
@@ -157,7 +179,7 @@ def main() -> int:
             print(json.dumps(service.telemetry_purge(), indent=2))
             return 0
         if args.telemetry_command == "export":
-            summary = service.telemetry_export(args.range, Path(args.out))
+            summary = service.telemetry_export(args.range, Path(args.out), actor_id=args.actor_id)
             print(json.dumps(summary, indent=2))
             return 0
 

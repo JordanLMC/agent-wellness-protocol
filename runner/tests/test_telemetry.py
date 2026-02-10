@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import os
-from datetime import date
+from datetime import UTC, date, datetime
 from pathlib import Path
 
 from clawspa_runner.service import RunnerService
@@ -51,7 +51,7 @@ def test_event_logger_appends_valid_jsonl(tmp_path: Path) -> None:
     row = rows[0]
     assert row["schema_version"] == "0.1"
     assert row["event_type"] == "runner.started"
-    assert row["actor"] == "system"
+    assert row["actor"] == {"kind": "system", "id": "unknown"}
     assert row["source"] == "cli"
     assert "build" in row
 
@@ -62,18 +62,21 @@ def test_export_aggregates_metrics(tmp_path: Path) -> None:
     logger.log_event(
         "plan.generated",
         actor="human",
+        actor_id="human:jordan",
         source="cli",
         data={"date": "2026-02-10", "quest_ids": ["q1", "q2", "q3"], "quest_count": 3},
     )
     logger.log_event(
         "quest.completed",
         actor="agent",
+        actor_id="openclaw:moltfred",
         source="mcp",
         data={"quest_id": "q1", "proof_tier": "P1", "timebox_estimate_minutes": 5, "observed_duration_seconds": 120},
     )
     logger.log_event(
         "quest.completed",
         actor="human",
+        actor_id="human:jordan",
         source="cli",
         data={"quest_id": "q2", "proof_tier": "P0", "timebox_estimate_minutes": 4, "observed_duration_seconds": 90},
     )
@@ -96,18 +99,29 @@ def test_export_aggregates_metrics(tmp_path: Path) -> None:
     assert summary["risk_flags_count"] >= 1
     assert summary["daily_streak"] == 2
     assert summary["total_xp"] == 30
+    assert summary["completions_by_actor_id"]["openclaw:moltfred"] == 1
+    assert summary["completions_by_actor_id"]["human:jordan"] == 1
+    assert summary["completions_by_source"]["mcp"] == 1
+    assert summary["events_by_actor_id"]["human:jordan"] >= 1
     assert summary["top_quests_completed"][0]["count"] == 1
 
 
 def test_plan_generation_writes_telemetry_event(tmp_path: Path) -> None:
     os.environ["AGENTWELLNESS_HOME"] = str(tmp_path / "home")
     service = RunnerService.create(_repo_root())
-    service.generate_daily_plan(date(2026, 2, 10), source="cli", actor="human")
+    service.generate_daily_plan(
+        date(2026, 2, 10),
+        source="cli",
+        actor="human",
+        actor_id="human:jordan",
+    )
 
     events_path = Path(os.environ["AGENTWELLNESS_HOME"]) / "telemetry" / "events.jsonl"
     rows = _read_jsonl(events_path)
     types = [row.get("event_type") for row in rows]
     assert "plan.generated" in types
+    plan_event = next(row for row in reversed(rows) if row.get("event_type") == "plan.generated")
+    assert plan_event["actor"] == {"kind": "human", "id": "human:jordan"}
 
 
 def test_proof_submission_writes_telemetry_event(tmp_path: Path) -> None:
@@ -119,9 +133,79 @@ def test_proof_submission_writes_telemetry_event(tmp_path: Path) -> None:
         "mission reflection",
         actor_mode="agent",
         source="mcp",
+        actor_id="openclaw:moltfred",
     )
     events_path = Path(os.environ["AGENTWELLNESS_HOME"]) / "telemetry" / "events.jsonl"
     rows = _read_jsonl(events_path)
     types = [row.get("event_type") for row in rows]
     assert "proof.submitted" in types
     assert "quest.completed" in types
+    proof_event = next(row for row in reversed(rows) if row.get("event_type") == "proof.submitted")
+    assert proof_event["actor"] == {"kind": "agent", "id": "openclaw:moltfred"}
+
+
+def test_export_can_filter_by_actor_id(tmp_path: Path) -> None:
+    events_path = tmp_path / "telemetry" / "events.jsonl"
+    logger = TelemetryLogger(events_path=events_path, repo_root=_repo_root())
+    logger.log_event(
+        "quest.completed",
+        actor="agent",
+        actor_id="openclaw:moltfred",
+        source="mcp",
+        data={"quest_id": "q1", "proof_tier": "P1"},
+    )
+    logger.log_event(
+        "quest.completed",
+        actor="human",
+        actor_id="human:jordan",
+        source="cli",
+        data={"quest_id": "q2", "proof_tier": "P0"},
+    )
+
+    summary = logger.export_summary(
+        range_value="7d",
+        score_state={"daily_streak": 0, "weekly_streak": 0, "total_xp": 0},
+        actor_id="openclaw:moltfred",
+    )
+    assert summary["actor_id_filter"] == "openclaw:moltfred"
+    assert summary["events_considered"] == 1
+    assert summary["completions_total"] == 1
+    assert summary["completions_by_actor_id"] == {"openclaw:moltfred": 1}
+
+
+def test_export_normalizes_legacy_actor_strings(tmp_path: Path) -> None:
+    events_path = tmp_path / "telemetry" / "events.jsonl"
+    events_path.parent.mkdir(parents=True, exist_ok=True)
+    now = datetime.now(tz=UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    legacy_events = [
+        {
+            "schema_version": "0.1",
+            "event_id": "legacy-1",
+            "ts": now,
+            "event_type": "quest.completed",
+            "actor": "agent",
+            "source": "mcp",
+            "build": {},
+            "data": {"quest_id": "q1", "proof_tier": "P0"},
+        },
+        {
+            "schema_version": "0.1",
+            "event_id": "legacy-2",
+            "ts": now,
+            "event_type": "quest.completed",
+            "source": "cli",
+            "build": {},
+            "data": {"quest_id": "q2", "proof_tier": "P1"},
+        },
+    ]
+    events_path.write_text("\n".join(json.dumps(event) for event in legacy_events) + "\n", encoding="utf-8")
+
+    logger = TelemetryLogger(events_path=events_path, repo_root=_repo_root())
+    summary = logger.export_summary(
+        range_value="365d",
+        score_state={"daily_streak": 0, "weekly_streak": 0, "total_xp": 0},
+    )
+    assert summary["completions_total"] == 2
+    assert summary["completions_by_actor_kind"]["agent"] == 1
+    assert summary["completions_by_actor_kind"]["system"] == 1
+    assert summary["completions_by_actor_id"]["unknown"] == 2

@@ -33,7 +33,9 @@ Every event includes:
   - `capability.granted`
   - `capability.revoked`
   - `risk.flagged`
-- `actor`: `human | agent | system`
+- `actor`
+  - `kind`: `human | agent | system`
+  - `id`: optional-at-source but persisted with fallback `"unknown"` (for example `openclaw:moltfred`, `human:jordan`)
 - `source`: `cli | api | mcp`
 - `build`
   - `runner_version`
@@ -56,10 +58,14 @@ Telemetry is redacted-by-design:
   - sha256
 - Long strings are truncated to prevent accidental dumping.
 - Secret/PII-like values are replaced with `[redacted]`.
+- Actor ids are sanitized with the same policy (control chars removed, secret-like values redacted, oversized values truncated).
 - If sanitizer actions occur, the system appends a `risk.flagged` event with:
   - `reason: telemetry_sanitized`
   - `fields_redacted_count`
   - `fields_truncated_count`
+
+Backward compatibility:
+- Older events with string `actor` or missing `actor.id` are normalized at read/export time.
 
 ## CLI operations
 
@@ -69,6 +75,9 @@ runner telemetry status
 
 # export aggregated, shareable metrics only
 runner telemetry export --range 7d --out ./telemetry-summary.json
+
+# export metrics for a specific actor id only
+runner telemetry export --range 1d --actor-id openclaw:moltfred --out ./moltfred-summary.json
 
 # purge local telemetry events
 runner telemetry purge
@@ -85,6 +94,11 @@ Range format:
 
 - `completions_total`
 - `completions_by_actor`
+- `completions_by_actor_kind`
+- `completions_by_actor_id`
+- `completions_by_source`
+- `events_by_actor_kind`
+- `events_by_actor_id`
 - `completions_by_proof_tier`
 - `daily_streak`, `weekly_streak`, `total_xp`
 - `plans_generated`, `avg_quests_per_plan`

@@ -120,7 +120,11 @@ def test_mcp_header_sets_event_source(tmp_path: Path) -> None:
     response = client.post(
         "/v1/plans/daily/generate",
         params={"date": "2026-02-10"},
-        headers={"X-Clawspa-Source": "mcp", "X-Clawspa-Actor": "agent"},
+        headers={
+            "X-Clawspa-Source": "mcp",
+            "X-Clawspa-Actor": "agent",
+            "X-Clawspa-Actor-Id": "openclaw:moltfred",
+        },
     )
     assert response.status_code == 200
 
@@ -128,4 +132,43 @@ def test_mcp_header_sets_event_source(tmp_path: Path) -> None:
     plan_events = [event for event in events if event.get("event_type") == "plan.generated"]
     assert plan_events
     assert plan_events[-1]["source"] == "mcp"
-    assert plan_events[-1]["actor"] == "agent"
+    assert plan_events[-1]["actor"] == {"kind": "agent", "id": "openclaw:moltfred"}
+
+
+def test_actor_id_header_precedence_over_body_actor_id(tmp_path: Path) -> None:
+    _, client = _service_and_client(tmp_path)
+    response = client.post(
+        "/v1/proofs",
+        headers={"X-Clawspa-Actor-Id": "openclaw:moltfred"},
+        json={
+            "quest_id": "wellness.identity.anchor.mission_statement.v1",
+            "tier": "P0",
+            "artifacts": [{"ref": "safe summary"}],
+            "mode": "agent",
+            "actor_id": "agent:body-actor",
+        },
+    )
+    assert response.status_code == 200
+    events = _events(tmp_path)
+    proof_events = [event for event in events if event.get("event_type") == "proof.submitted"]
+    assert proof_events
+    assert proof_events[-1]["actor"] == {"kind": "agent", "id": "openclaw:moltfred"}
+
+
+def test_actor_id_body_used_when_header_missing(tmp_path: Path) -> None:
+    _, client = _service_and_client(tmp_path)
+    response = client.post(
+        "/v1/proofs",
+        json={
+            "quest_id": "wellness.identity.anchor.mission_statement.v1",
+            "tier": "P0",
+            "artifacts": [{"ref": "safe summary"}],
+            "mode": "agent",
+            "actor_id": "openclaw:moltfred",
+        },
+    )
+    assert response.status_code == 200
+    events = _events(tmp_path)
+    proof_events = [event for event in events if event.get("event_type") == "proof.submitted"]
+    assert proof_events
+    assert proof_events[-1]["actor"] == {"kind": "agent", "id": "openclaw:moltfred"}
