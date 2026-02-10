@@ -21,6 +21,7 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
   "pytest==8.3.4",
+  "httpx==0.28.1",
 ]
 
 [project.scripts]
@@ -37,4 +38,5 @@ testpaths = [
   "quests/tools/quest-lint/tests",
   "runner/tests",
   "mcp-server/tests",
+  "scripts/tests",
 ]

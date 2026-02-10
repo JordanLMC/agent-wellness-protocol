@@ -15,7 +15,19 @@ def _write(path: Path, text: str) -> None:
     path.write_text(text.strip() + "\n", encoding="utf-8")
 
 
-def _mk_pack(tmp_path: Path, quests: dict[str, str], *, with_checksums: bool = False, mismatch_checksum: bool = False) -> Path:
+def _normalized_sha256(path: Path) -> str:
+    text = path.read_text(encoding="utf-8")
+    normalized = text.replace("\r\n", "\n").replace("\r", "\n")
+    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+
+
+def _mk_pack(
+    tmp_path: Path,
+    quests: dict[str, str],
+    *,
+    with_checksums: bool = False,
+    mismatch_checksum: bool = False,
+) -> Path:
     pack_dir = tmp_path / "packs" / "wellness.core.v0"
     quests_dir = pack_dir / "quests"
     quests_dir.mkdir(parents=True, exist_ok=True)
@@ -28,7 +40,7 @@ def _mk_pack(tmp_path: Path, quests: dict[str, str], *, with_checksums: bool = F
         data = yaml.safe_load(file_path.read_text(encoding="utf-8"))
         quest_ids.append(data["quest"]["id"])
         rel = f"quests/{file_name}"
-        digest = hashlib.sha256(file_path.read_bytes()).hexdigest()
+        digest = _normalized_sha256(file_path)
         checksums[rel] = ("0" * 64) if mismatch_checksum else digest
 
     pack_doc = {
@@ -215,3 +227,22 @@ def test_checksum_mismatch_fails(tmp_path: Path) -> None:
     )
     findings = lint_path(pack, docs_dir=DOCS_DIR)
     assert "PACK-004" in _rules(findings)
+
+
+def test_hidden_unicode_in_quest_fails(tmp_path: Path) -> None:
+    bad = PASS_QUEST_1.replace("Permission Inventory", "Permission \u202EInventory")
+    pack = _mk_pack(tmp_path, {"wellness.bad.bidi.v1.quest.yaml": bad})
+    findings = lint_path(pack, docs_dir=DOCS_DIR)
+    assert "SEC-CONTENT-004" in _rules(findings)
+
+
+def test_hidden_unicode_in_pack_fails(tmp_path: Path) -> None:
+    pack = _mk_pack(
+        tmp_path,
+        {"wellness.security.permission.inventory.v1.quest.yaml": PASS_QUEST_1},
+    )
+    pack_file = pack / "pack.yaml"
+    updated = pack_file.read_text(encoding="utf-8").replace("Core Wellness Pack", "Core \u2066Wellness Pack")
+    pack_file.write_text(updated, encoding="utf-8")
+    findings = lint_path(pack, docs_dir=DOCS_DIR)
+    assert "SEC-CONTENT-004" in _rules(findings)

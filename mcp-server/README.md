@@ -16,9 +16,17 @@ Thin MCP wrapper over the local runner API.
 - Tool schemas accept references/metadata only.
 - No raw file contents accepted.
 - Intended for localhost API bridge usage.
+- `--api-base` is localhost-only by default.
+- Use `--allow-nonlocal` only for explicit trusted deployments.
+- `--api-base` must use `http` or `https` and must not include userinfo.
 
 ## Run
 
 ```bash
 clawspa-mcp --api-base http://127.0.0.1:8000
+```
+
+```bash
+# Explicit non-local override (not default)
+clawspa-mcp --api-base https://trusted-host.example --allow-nonlocal
 ```

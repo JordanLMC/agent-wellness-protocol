@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import argparse
+import ipaddress
 import json
 import sys
 from datetime import date
 from typing import Any
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlsplit
 from urllib.request import Request, urlopen
 
 
@@ -72,8 +73,8 @@ TOOL_SCHEMAS = [
 
 
 class MCPBridge:
-    def __init__(self, api_base: str) -> None:
-        self.api_base = api_base.rstrip("/")
+    def __init__(self, api_base: str, *, allow_nonlocal: bool = False) -> None:
+        self.api_base = validate_api_base(api_base, allow_nonlocal=allow_nonlocal)
 
     def _request(self, method: str, path: str, params: dict[str, Any] | None = None, body: dict[str, Any] | None = None) -> Any:
         url = f"{self.api_base}{path}"
@@ -132,6 +133,29 @@ def deep_merge(base: dict[str, Any], patch: dict[str, Any]) -> dict[str, Any]:
     return merged
 
 
+def is_local_host(hostname: str) -> bool:
+    normalized = hostname.strip().lower().rstrip(".")
+    if normalized == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(normalized).is_loopback
+    except ValueError:
+        return False
+
+
+def validate_api_base(api_base: str, *, allow_nonlocal: bool = False) -> str:
+    parsed = urlsplit(api_base)
+    if parsed.scheme not in {"http", "https"}:
+        raise ValueError("api-base must use http or https scheme.")
+    if parsed.username or parsed.password:
+        raise ValueError("api-base must not include userinfo.")
+    if not parsed.hostname:
+        raise ValueError("api-base must include a host.")
+    if not allow_nonlocal and not is_local_host(parsed.hostname):
+        raise ValueError("api-base must target localhost by default. Use --allow-nonlocal to override.")
+    return api_base.rstrip("/")
+
+
 def _write_response(response_id: Any, result: Any = None, error: str | None = None) -> None:
     payload: dict[str, Any] = {"id": response_id}
     if error is not None:
@@ -176,11 +200,16 @@ def serve_stdio(bridge: MCPBridge) -> int:
 def main() -> int:
     parser = argparse.ArgumentParser(description="ClawSpa MCP wrapper over local runner API.")
     parser.add_argument("--api-base", default="http://127.0.0.1:8000", help="Local runner API base URL.")
+    parser.add_argument(
+        "--allow-nonlocal",
+        action="store_true",
+        help="Allow non-local api-base hosts (off by default for safety).",
+    )
     parser.add_argument("--tool", help="Optional direct tool call mode.")
     parser.add_argument("--args-json", default="{}", help="Tool arguments in JSON.")
     args = parser.parse_args()
 
-    bridge = MCPBridge(api_base=args.api_base)
+    bridge = MCPBridge(api_base=args.api_base, allow_nonlocal=args.allow_nonlocal)
     if args.tool:
         tool_args = json.loads(args.args_json)
         print(json.dumps(bridge.call_tool(args.tool, tool_args), indent=2))

@@ -1,7 +1,7 @@
 # QUEST_LINT_RULES.md
 Version: v0.1  
 Status: Draft  
-Last updated: 2026-02-08  
+Last updated: 2026-02-10  
 Owner: Project Team  
 
 ## Purpose
@@ -160,6 +160,16 @@ Warn on:
 - “disable firewall”
 - “open port” / “expose dashboard”
 - “skip permissions”
+
+**SEC-CONTENT-004 (ERROR) — Hidden Unicode control characters**
+Reject quest and pack files containing bidi/invisible control characters (Trojan Source class), including:
+- bidi override/isolate marks (e.g., U+202A..U+202E, U+2066..U+2069)
+- invisible separators/joiners (e.g., U+200B/U+200C/U+200D/U+2060)
+- BOM/soft-hyphen control usage in content text
+
+Required behavior:
+- lint must emit file + location and fail with `ERROR`.
+- applies to `pack.yaml` and all `*.quest.yaml`.
 
 ---
 

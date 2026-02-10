@@ -35,3 +35,11 @@ def test_capability_grant_requires_confirmation(tmp_path: Path) -> None:
         json={"capabilities": ["exec:shell"], "ttl_seconds": 300, "scope": "test", "confirmed": False},
     )
     assert response.status_code == 400
+
+
+def test_pack_sync_route_not_shadowed_by_pack_id(tmp_path: Path) -> None:
+    client = _client(tmp_path)
+    response = client.post("/v1/packs/sync")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "noop"
