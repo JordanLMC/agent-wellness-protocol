@@ -18,11 +18,11 @@ pack:
   checksums:
     algo: "sha256"
     files:
-      "quests/wellness.security.permissions.permission_inventory.v1.quest.yaml": "3c02de88d53f5226e9cf932473beadd8ac4940be666c0d4e8696756157b770db"
-      "quests/wellness.security.secrets.no_keys_in_prompts.v1.quest.yaml": "ee6eeab3d4a2857cff6abed952affe6b026a6fe122d9320b1c778740a339a1bb"
-      "quests/wellness.security.least_privilege.one_click_review.v1.quest.yaml": "059c0c34e0bcf1631d7c82f422f5617a4a2a3e01117b87c417d4794fb06fafd2"
-      "quests/wellness.identity.anchor.mission_statement.v1.quest.yaml": "2b22e88a344865bddb0e0fad6b2537fdf55fa338f5bf94edf3822ddf86d7cd80"
-      "quests/wellness.identity.boundary.ask_before_acting.v1.quest.yaml": "490a85251ed9c704f026912795b296f1df5fa23193ee93cb87e26d95add03254"
+      "quests/wellness.security.permissions.permission_inventory.v1.quest.yaml": "aef45bd052d7fbd6949a7b0ef34535af755e55fb78c700ab32c7f848a82759fa"
+      "quests/wellness.security.secrets.no_keys_in_prompts.v1.quest.yaml": "533300cb7b682300240a75b83772c4970dda2ca2f50a2ed46e00eb7af435f2d8"
+      "quests/wellness.security.least_privilege.one_click_review.v1.quest.yaml": "cebac15ec23e3ca880947ae23af34bb0cf858b6f68379752b6d80ca0ece04f8d"
+      "quests/wellness.identity.anchor.mission_statement.v1.quest.yaml": "0015510a5555075161efafd8e8a44917b4a415777c303ae68b220b59967e3a74"
+      "quests/wellness.identity.boundary.ask_before_acting.v1.quest.yaml": "184211e651ba99358e785c7c719b8fa7e60c5cd0f147e9b452c555aca07c106e"
   signing:
     scheme: "none"
     signature: null

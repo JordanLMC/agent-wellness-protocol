@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from clawspa_mcp.server import MCPBridge, deep_merge
+import pytest
+
+from clawspa_mcp.server import MCPBridge, deep_merge, validate_api_base
 
 
 def test_deep_merge_nested() -> None:
@@ -17,3 +19,28 @@ def test_tool_unknown_raises() -> None:
         assert False, "Expected ValueError"
     except ValueError:
         assert True
+
+
+def test_validate_api_base_localhost_allowed() -> None:
+    value = validate_api_base("http://localhost:8000")
+    assert value == "http://localhost:8000"
+
+
+def test_validate_api_base_nonlocal_rejected_by_default() -> None:
+    with pytest.raises(ValueError, match="localhost"):
+        validate_api_base("https://example.com")
+
+
+def test_validate_api_base_nonlocal_allowed_with_override() -> None:
+    value = validate_api_base("https://example.com", allow_nonlocal=True)
+    assert value == "https://example.com"
+
+
+def test_validate_api_base_rejects_userinfo() -> None:
+    with pytest.raises(ValueError, match="userinfo"):
+        validate_api_base("http://user:pass@127.0.0.1:8000")
+
+
+def test_validate_api_base_rejects_bad_scheme() -> None:
+    with pytest.raises(ValueError, match="http or https"):
+        validate_api_base("ftp://127.0.0.1")

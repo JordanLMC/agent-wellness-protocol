@@ -1,7 +1,7 @@
 # THREAT_MODEL.md
 Version: v0.1  
 Status: Draft  
-Last updated: 2026-02-08  
+Last updated: 2026-02-10  
 Owner: Project Team  
 
 ## Purpose
@@ -47,6 +47,7 @@ The Wellness System will likely include these surfaces (not all required at MVP)
 
 ### B. System integrity assets
 - **Quest packs** (content) and their **provenance** (who published them).
+- **Workflow and CI policy files** (build/release integrity and verification gates).
 - **Runner binaries** and update channels.
 - **MCP server code** and tool schemas.
 - **Proof/attestation artifacts** (including redacted logs, hashes, metadata).
@@ -155,6 +156,14 @@ The Wellness System will likely include these surfaces (not all required at MVP)
 - Progressive disclosure; default-deny.
 - Time-limited elevation tokens (“sudo for tools”).
 - Cooldowns, auto-revert to Safe Mode after high-risk actions.
+
+### 8) Trojan Source / bidi obfuscation in supply-chain files
+**Attack:** Hidden Unicode bidi/invisible control characters are inserted into quest packs or workflow files to obfuscate dangerous content or alter reviewer understanding.  
+**Impact:** Malicious content may pass human review and execute via downstream automation.  
+**Mitigations:**
+- Treat quest content and workflow files as supply chain artifacts.
+- Enforce CI scanning for bidi/invisible Unicode controls.
+- Enforce quest-lint hard errors on hidden controls in `pack.yaml` and `*.quest.yaml`.
 
 ---
 

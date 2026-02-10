@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import unicodedata
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
@@ -96,6 +97,26 @@ SOCIAL_CONTAGION_PATTERNS = [
         r"moltbook",
     ]
 ]
+
+HIDDEN_UNICODE_CONTROLS = {
+    0x00AD,
+    0x200B,
+    0x200C,
+    0x200D,
+    0x200E,
+    0x200F,
+    0x202A,
+    0x202B,
+    0x202C,
+    0x202D,
+    0x202E,
+    0x2060,
+    0x2066,
+    0x2067,
+    0x2068,
+    0x2069,
+    0xFEFF,
+}
 
 
 @dataclass
@@ -202,6 +223,31 @@ def _add(
     )
 
 
+def _scan_hidden_unicode(
+    findings: list[Finding],
+    *,
+    file_path: Path,
+    text: str,
+) -> None:
+    for line_number, line in enumerate(text.splitlines(), start=1):
+        for col_number, char in enumerate(line, start=1):
+            codepoint = ord(char)
+            if codepoint in HIDDEN_UNICODE_CONTROLS:
+                name = unicodedata.name(char, "UNKNOWN")
+                _add(
+                    findings,
+                    rule_id="SEC-CONTENT-004",
+                    severity="ERROR",
+                    file=file_path,
+                    path="$",
+                    message=(
+                        f"Hidden Unicode control found at line {line_number}, col {col_number}: "
+                        f"U+{codepoint:04X} {name}"
+                    ),
+                    suggested_fix="Remove invisible/bidi control characters from quest and pack files.",
+                )
+
+
 def lint_path(target_path: str | Path, docs_dir: str | Path | None = None) -> list[Finding]:
     target = Path(target_path).resolve()
     if not target.exists():
@@ -239,7 +285,9 @@ def lint_path(target_path: str | Path, docs_dir: str | Path | None = None) -> li
             )
 
         try:
-            data = yaml.safe_load(quest_file.read_text(encoding="utf-8"))
+            raw_text = quest_file.read_text(encoding="utf-8")
+            _scan_hidden_unicode(findings, file_path=quest_file, text=raw_text)
+            data = yaml.safe_load(raw_text)
         except yaml.YAMLError as exc:
             _add(
                 findings,
@@ -613,7 +661,10 @@ def lint_path(target_path: str | Path, docs_dir: str | Path | None = None) -> li
                 suggested_fix=f"Rename file to include '{quest_id}' or '{slug}'.",
             )
 
-    for pack_dir, id_to_files in pack_to_ids.items():
+    all_pack_files = sorted(p for p in target.rglob("pack.yaml") if p.is_file())
+    seen_pack_dirs = {pack_file.parent for pack_file in all_pack_files}
+    for pack_dir in seen_pack_dirs:
+        id_to_files = pack_to_ids.get(pack_dir, {})
         for quest_id, files in id_to_files.items():
             if len(files) > 1:
                 for file in files:
@@ -628,10 +679,10 @@ def lint_path(target_path: str | Path, docs_dir: str | Path | None = None) -> li
                     )
 
         pack_file = pack_dir / "pack.yaml"
-        if not pack_file.exists():
-            continue
         try:
-            pack_data = yaml.safe_load(pack_file.read_text(encoding="utf-8")) or {}
+            pack_raw = pack_file.read_text(encoding="utf-8")
+            _scan_hidden_unicode(findings, file_path=pack_file, text=pack_raw)
+            pack_data = yaml.safe_load(pack_raw) or {}
         except yaml.YAMLError as exc:
             _add(
                 findings,

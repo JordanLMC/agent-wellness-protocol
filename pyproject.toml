@@ -37,4 +37,5 @@ testpaths = [
   "quests/tools/quest-lint/tests",
   "runner/tests",
   "mcp-server/tests",
+  "scripts/tests",
 ]

@@ -21,8 +21,11 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e ".[dev]"
 
+      - name: Scan Unicode Controls
+        run: python scripts/check_bidi.py .
+
       - name: Run tests
-        run: pytest
+        run: pytest --basetemp .pytest_tmp
 
       - name: Run quest-lint
         run: quest-lint quests --format text

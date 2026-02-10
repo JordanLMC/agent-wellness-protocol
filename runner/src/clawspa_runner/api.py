@@ -44,16 +44,16 @@ def create_app(service: RunnerService) -> FastAPI:
     def list_packs() -> list[dict[str, Any]]:
         return service.quests.list_packs()
 
+    @app.post("/v1/packs/sync")
+    def sync_packs() -> dict[str, str]:
+        return {"status": "noop", "message": "v0.1 local packs only"}
+
     @app.get("/v1/packs/{pack_id}")
     def get_pack(pack_id: str) -> dict[str, Any]:
         pack = service.quests.get_pack(pack_id)
         if not pack:
             raise HTTPException(status_code=404, detail="Pack not found")
         return pack
-
-    @app.post("/v1/packs/sync")
-    def sync_packs() -> dict[str, str]:
-        return {"status": "noop", "message": "v0.1 local packs only"}
 
     @app.get("/v1/quests/{quest_id}")
     def get_quest(quest_id: str) -> dict[str, Any]:

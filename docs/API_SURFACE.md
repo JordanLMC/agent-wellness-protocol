@@ -1,7 +1,7 @@
 # API_SURFACE.md
 Version: v0.1  
 Status: Draft  
-Last updated: 2026-02-09  
+Last updated: 2026-02-10  
 Owner: Project Team  
 
 ## Purpose
@@ -103,6 +103,12 @@ The MCP server should expose tools that map cleanly to the API:
 - `update_agent_profile(profile_patch)` → `PUT /v1/profiles/agent`
 
 > MCP tool schemas should avoid accepting raw file contents or secrets.
+
+MCP transport policy (runner wrapper):
+- default `api-base` target is localhost only (`127.0.0.1`, `::1`, `localhost`)
+- non-local targets require explicit `--allow-nonlocal`
+- scheme must be `http` or `https`
+- userinfo in URL is forbidden
 
 ---
 
