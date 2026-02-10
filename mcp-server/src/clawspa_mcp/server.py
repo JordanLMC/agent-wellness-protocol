@@ -91,7 +91,11 @@ class MCPBridge:
         if params:
             url = f"{url}?{urlencode(params)}"
         data = None
-        headers = {"Content-Type": "application/json"}
+        headers = {
+            "Content-Type": "application/json",
+            "X-Clawspa-Source": "mcp",
+            "X-Clawspa-Actor": "agent",
+        }
         if body is not None:
             data = json.dumps(body).encode("utf-8")
         request = Request(url=url, method=method, headers=headers, data=data)

@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date
 from typing import Any
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
 from .service import RunnerService
@@ -35,6 +35,15 @@ class RevokeRequest(BaseModel):
 
 def create_app(service: RunnerService) -> FastAPI:
     app = FastAPI(title="ClawSpa Runner API", version="0.1")
+
+    def request_context(request: Request, default_actor: str = "human") -> tuple[str, str]:
+        source = request.headers.get("x-clawspa-source", "api").strip().lower()
+        actor = request.headers.get("x-clawspa-actor", default_actor).strip().lower()
+        if source not in {"cli", "api", "mcp"}:
+            source = "api"
+        if actor not in {"human", "agent", "system"}:
+            actor = default_actor
+        return source, actor
 
     @app.get("/v1/health")
     def health() -> dict[str, Any]:
@@ -81,9 +90,10 @@ def create_app(service: RunnerService) -> FastAPI:
         return service.get_profile("human")
 
     @app.put("/v1/profiles/human")
-    def put_human_profile(profile: dict[str, Any]) -> dict[str, Any]:
+    def put_human_profile(profile: dict[str, Any], request: Request) -> dict[str, Any]:
         try:
-            return service.put_profile("human", profile)
+            source, actor = request_context(request, default_actor="human")
+            return service.put_profile("human", profile, source=source, actor=actor)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -92,9 +102,10 @@ def create_app(service: RunnerService) -> FastAPI:
         return service.get_profile("agent")
 
     @app.put("/v1/profiles/agent")
-    def put_agent_profile(profile: dict[str, Any]) -> dict[str, Any]:
+    def put_agent_profile(profile: dict[str, Any], request: Request) -> dict[str, Any]:
         try:
-            return service.put_profile("agent", profile)
+            source, actor = request_context(request, default_actor="agent")
+            return service.put_profile("agent", profile, source=source, actor=actor)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -107,32 +118,42 @@ def create_app(service: RunnerService) -> FastAPI:
         return service.generate_alignment_snapshot()
 
     @app.get("/v1/plans/daily")
-    def get_daily_plan(date: str = Query(..., pattern=r"^\d{4}-\d{2}-\d{2}$")) -> dict[str, Any]:
+    def get_daily_plan(
+        request: Request,
+        date: str = Query(..., pattern=r"^\d{4}-\d{2}-\d{2}$"),
+    ) -> dict[str, Any]:
         try:
             target = date_from_str(date)
-            return service.get_daily_plan(target)
+            source, actor = request_context(request, default_actor="human")
+            return service.get_daily_plan(target, source=source, actor=actor)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @app.post("/v1/plans/daily/generate")
-    def generate_daily_plan(date: str = Query(..., pattern=r"^\d{4}-\d{2}-\d{2}$")) -> dict[str, Any]:
+    def generate_daily_plan(
+        request: Request,
+        date: str = Query(..., pattern=r"^\d{4}-\d{2}-\d{2}$"),
+    ) -> dict[str, Any]:
         try:
             target = date_from_str(date)
-            return service.generate_daily_plan(target)
+            source, actor = request_context(request, default_actor="human")
+            return service.generate_daily_plan(target, source=source, actor=actor)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @app.post("/v1/proofs")
-    def submit_proof(request: ProofRequest) -> dict[str, Any]:
+    def submit_proof(request: ProofRequest, http_request: Request) -> dict[str, Any]:
         artifact_refs = [item.ref for item in request.artifacts]
         primary_artifact = artifact_refs[0] if artifact_refs else ""
         try:
+            source, _ = request_context(http_request, default_actor=request.mode if request.mode in {"human", "agent"} else "agent")
             return service.complete_quest(
                 request.quest_id,
                 request.tier,
                 primary_artifact,
                 actor_mode=request.mode,
                 artifacts=artifact_refs[1:],
+                source=source,
             )
         except (ValueError, PermissionError) as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -160,21 +181,30 @@ def create_app(service: RunnerService) -> FastAPI:
         return service.get_capabilities()
 
     @app.post("/v1/capabilities/grant")
-    def grant_capabilities(request: GrantRequest) -> dict[str, Any]:
+    def grant_capabilities(request: GrantRequest, http_request: Request) -> dict[str, Any]:
         try:
+            source, actor = request_context(http_request, default_actor="human")
             return service.grant_capabilities_with_ticket(
                 capabilities=request.capabilities,
                 ttl_seconds=request.ttl_seconds,
                 scope=request.scope,
                 ticket_token=request.ticket_token,
+                source=source,
+                actor=actor,
             )
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @app.post("/v1/capabilities/revoke")
-    def revoke_capabilities(request: RevokeRequest) -> dict[str, Any]:
+    def revoke_capabilities(request: RevokeRequest, http_request: Request) -> dict[str, Any]:
         try:
-            return service.revoke_capability(grant_id=request.grant_id, capability=request.capability)
+            source, actor = request_context(http_request, default_actor="human")
+            return service.revoke_capability(
+                grant_id=request.grant_id,
+                capability=request.capability,
+                source=source,
+                actor=actor,
+            )
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 

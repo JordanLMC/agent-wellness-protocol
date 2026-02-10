@@ -11,6 +11,7 @@ from typing import Any
 from .paths import agent_home, ensure_home_dirs
 from .quests import QuestRepository
 from .security import payload_contains_pii, payload_contains_secrets, payload_requests_raw_logs
+from .telemetry import TelemetryLogger
 
 
 STATE_SCHEMA_VERSION = "0.1"
@@ -104,14 +105,22 @@ class RunnerService:
     home: Path
     quests: QuestRepository
     dirs: dict[str, Path]
+    telemetry: TelemetryLogger
 
     @classmethod
     def create(cls, repo_root: Path) -> "RunnerService":
         home = agent_home()
         dirs = ensure_home_dirs(home)
         quests = QuestRepository.from_repo_root(repo_root)
-        service = cls(repo_root=repo_root, home=home, quests=quests, dirs=dirs)
+        telemetry = TelemetryLogger(events_path=dirs["telemetry"] / "events.jsonl", repo_root=repo_root)
+        service = cls(repo_root=repo_root, home=home, quests=quests, dirs=dirs, telemetry=telemetry)
         service._ensure_state_files()
+        service.telemetry.log_event(
+            "runner.started",
+            actor="system",
+            source="cli",
+            data={"home_path_hash": hashlib.sha256(str(home).encode("utf-8")).hexdigest()},
+        )
         return service
 
     @property
@@ -188,6 +197,38 @@ class RunnerService:
 
     def validate_content(self) -> list[dict[str, str]]:
         return self.quests.lint()
+
+    def _normalize_actor(self, actor: str) -> str:
+        if actor in {"human", "agent", "system"}:
+            return actor
+        return "system"
+
+    def _normalize_source(self, source: str) -> str:
+        if source in {"cli", "api", "mcp"}:
+            return source
+        return "cli"
+
+    def _emit_event(self, event_type: str, *, actor: str, source: str, data: dict[str, Any]) -> None:
+        self.telemetry.log_event(
+            event_type,
+            actor=self._normalize_actor(actor),
+            source=self._normalize_source(source),
+            data=data,
+        )
+
+    def _quest_timebox_minutes(self, quest: dict[str, Any]) -> int:
+        tags = quest.get("quest", {}).get("tags", [])
+        if not isinstance(tags, list):
+            return 0
+        for tag in tags:
+            if not isinstance(tag, str):
+                continue
+            lowered = tag.lower()
+            if lowered.startswith("timebox:"):
+                _, value = lowered.split(":", 1)
+                if value.isdigit():
+                    return int(value)
+        return 0
 
     def _load_score_state(self) -> dict[str, Any]:
         data = _load_json(
@@ -334,7 +375,16 @@ class RunnerService:
         _save_json(self.ticket_path, data)
         return ticket
 
-    def grant_capabilities_with_ticket(self, capabilities: list[str], ttl_seconds: int, scope: str, ticket_token: str) -> dict[str, Any]:
+    def grant_capabilities_with_ticket(
+        self,
+        capabilities: list[str],
+        ttl_seconds: int,
+        scope: str,
+        ticket_token: str,
+        *,
+        source: str = "cli",
+        actor: str = "human",
+    ) -> dict[str, Any]:
         if ttl_seconds <= 0:
             raise ValueError("ttl_seconds must be positive.")
         normalized_capabilities = self._normalize_capabilities(capabilities)
@@ -383,23 +433,79 @@ class RunnerService:
         matched_ticket["used"] = True
         matched_ticket["used_at"] = now.isoformat()
         _save_json(self.ticket_path, ticket_data)
+        self._emit_event(
+            "capability.granted",
+            actor=actor,
+            source=source,
+            data={
+                "grant_id": grant["grant_id"],
+                "scope": scope,
+                "ttl_seconds": ttl_seconds,
+                "capabilities": normalized_capabilities,
+                "capability_count": len(normalized_capabilities),
+            },
+        )
         return grant
 
-    def revoke_capability(self, grant_id: str | None = None, capability: str | None = None) -> dict[str, Any]:
+    def revoke_capability(
+        self,
+        grant_id: str | None = None,
+        capability: str | None = None,
+        *,
+        source: str = "cli",
+        actor: str = "human",
+    ) -> dict[str, Any]:
         if not grant_id and not capability:
             raise ValueError("Provide grant_id or capability.")
         data = self._load_capabilities_state()
         changed = 0
+        revoked_grants: list[dict[str, Any]] = []
         for grant in data.get("grants", []):
             if grant.get("revoked"):
                 continue
             if grant_id and grant.get("grant_id") == grant_id:
                 grant["revoked"] = True
                 changed += 1
+                created_at = self._parse_iso_dt(grant.get("created_at"))
+                expires_at = self._parse_iso_dt(grant.get("expires_at"))
+                ttl_seconds = 0
+                if created_at and expires_at:
+                    ttl_seconds = max(0, int((expires_at - created_at).total_seconds()))
+                revoked_grants.append(
+                    {
+                        "grant_id": grant.get("grant_id"),
+                        "scope": grant.get("scope"),
+                        "ttl_seconds": ttl_seconds,
+                    }
+                )
             elif capability and capability in grant.get("capabilities", []):
                 grant["revoked"] = True
                 changed += 1
+                created_at = self._parse_iso_dt(grant.get("created_at"))
+                expires_at = self._parse_iso_dt(grant.get("expires_at"))
+                ttl_seconds = 0
+                if created_at and expires_at:
+                    ttl_seconds = max(0, int((expires_at - created_at).total_seconds()))
+                revoked_grants.append(
+                    {
+                        "grant_id": grant.get("grant_id"),
+                        "scope": grant.get("scope"),
+                        "ttl_seconds": ttl_seconds,
+                    }
+                )
         _save_json(self.capability_path, data)
+        if changed:
+            self._emit_event(
+                "capability.revoked",
+                actor=actor,
+                source=source,
+                data={
+                    "revoked_count": changed,
+                    "grant_id": grant_id,
+                    "capability": capability,
+                    "revoked_grants": revoked_grants,
+                },
+            )
         return {"revoked": changed}
 
     def list_quests(self) -> dict[str, dict[str, Any]]:
@@ -481,7 +587,7 @@ class RunnerService:
                 return quest
         return None
 
-    def generate_daily_plan(self, target_date: date) -> dict[str, Any]:
+    def generate_daily_plan(self, target_date: date, *, source: str = "cli", actor: str = "human") -> dict[str, Any]:
         all_daily = [q for q in self.list_quests().values() if q.get("quest", {}).get("cadence") == "daily"]
         if not all_daily:
             raise ValueError("No daily quests found.")
@@ -519,13 +625,31 @@ class RunnerService:
             "quests": selected[:5],
         }
         _save_json(self.dirs["plans"] / f"daily-{key}.json", plan)
+        self._emit_event(
+            "plan.generated",
+            actor=actor,
+            source=source,
+            data={
+                "date": key,
+                "quest_ids": plan["quest_ids"],
+                "quest_count": len(plan["quest_ids"]),
+                "pillars": sorted(
+                    {
+                        pillar
+                        for quest in selected[:5]
+                        for pillar in quest.get("quest", {}).get("pillars", [])
+                        if isinstance(pillar, str)
+                    }
+                ),
+            },
+        )
         return plan
 
-    def get_daily_plan(self, target_date: date) -> dict[str, Any]:
+    def get_daily_plan(self, target_date: date, *, source: str = "cli", actor: str = "human") -> dict[str, Any]:
         plan_file = self.dirs["plans"] / f"daily-{target_date.isoformat()}.json"
         if plan_file.exists():
             return _load_json(plan_file, {})
-        return self.generate_daily_plan(target_date)
+        return self.generate_daily_plan(target_date, source=source, actor=actor)
 
     def _validate_artifact_text(self, text: str, *, source: str) -> None:
         if payload_contains_secrets(text):
@@ -592,30 +716,76 @@ class RunnerService:
         artifact: str,
         actor_mode: str = "agent",
         artifacts: list[str] | None = None,
+        source: str = "cli",
     ) -> dict[str, Any]:
-        if tier not in TIER_RANK:
-            raise ValueError("tier must be one of P0|P1|P2|P3")
-        if payload_contains_secrets({"artifact": artifact, "artifacts": artifacts or []}):
-            raise ValueError("Artifact payload appears to contain secret-like data.")
+        actor = self._normalize_actor(actor_mode)
+        source = self._normalize_source(source)
 
-        quest = self.get_quest(quest_id)
+        def _fail(reason: str, message: str, *, raise_exc: Exception) -> None:
+            self._emit_event(
+                "quest.failed",
+                actor=actor,
+                source=source,
+                data={
+                    "quest_id": quest_id,
+                    "reason": reason,
+                    "detail_hash": hashlib.sha256(message.encode("utf-8")).hexdigest(),
+                },
+            )
+            raise raise_exc
+
+        if tier not in TIER_RANK:
+            _fail("validation_error", "invalid proof tier", raise_exc=ValueError("tier must be one of P0|P1|P2|P3"))
+
+        if payload_contains_secrets({"artifact": artifact, "artifacts": artifacts or []}):
+            self._emit_event(
+                "risk.flagged",
+                actor="system",
+                source=source,
+                data={"reason": "artifact_secret_like", "quest_id": quest_id},
+            )
+            _fail(
+                "validation_error",
+                "artifact payload appears secret-like",
+                raise_exc=ValueError("Artifact payload appears to contain secret-like data."),
+            )
+
+        try:
+            quest = self.get_quest(quest_id)
+        except KeyError as exc:
+            _fail("not_found", "unknown quest_id", raise_exc=exc)
+
         allowed, mode_used = self._can_run_quest(quest)
         if not allowed:
-            raise PermissionError(f"Quest blocked in Safe Mode: {mode_used}")
+            _fail(
+                "capability_missing" if "missing capability grants" in mode_used else "policy_blocked",
+                mode_used,
+                raise_exc=PermissionError(f"Quest blocked in Safe Mode: {mode_used}"),
+            )
 
         q = quest["quest"]
         expected_tier = q.get("proof", {}).get("tier")
         if expected_tier in TIER_RANK and TIER_RANK[tier] < TIER_RANK[expected_tier]:
-            raise ValueError(f"tier {tier} does not meet quest minimum proof tier {expected_tier}.")
+            _fail(
+                "validation_error",
+                "tier below required minimum",
+                raise_exc=ValueError(f"tier {tier} does not meet quest minimum proof tier {expected_tier}."),
+            )
 
         declared_artifacts = q.get("proof", {}).get("artifacts", [])
         required_artifacts = [
-            artifact_decl for artifact_decl in declared_artifacts if isinstance(artifact_decl, dict) and artifact_decl.get("required", True)
+            artifact_decl
+            for artifact_decl in declared_artifacts
+            if isinstance(artifact_decl, dict) and artifact_decl.get("required", True)
         ]
         if tier in {"P2", "P3"}:
             for artifact_decl in required_artifacts:
                 if not artifact_decl.get("redaction_policy"):
-                    raise ValueError("Quest proof artifacts for P2/P3 must include redaction_policy.")
+                    _fail(
+                        "validation_error",
+                        "missing redaction policy",
+                        raise_exc=ValueError("Quest proof artifacts for P2/P3 must include redaction_policy."),
+                    )
 
         artifact_inputs = artifacts or []
         if artifact and artifact.strip():
@@ -632,11 +802,50 @@ class RunnerService:
             seen_artifacts.add(normalized)
 
         if required_artifacts and not normalized_artifacts:
-            raise ValueError("This quest requires at least one artifact reference.")
+            _fail(
+                "validation_error",
+                "required artifact missing",
+                raise_exc=ValueError("This quest requires at least one artifact reference."),
+            )
         if tier != "P0" and not normalized_artifacts:
-            raise ValueError("tier P1+ requires at least one artifact reference.")
+            _fail(
+                "validation_error",
+                "tier P1+ requires artifact",
+                raise_exc=ValueError("tier P1+ requires at least one artifact reference."),
+            )
 
-        artifact_refs = [self._artifact_ref(item) for item in normalized_artifacts]
+        try:
+            artifact_refs = [self._artifact_ref(item) for item in normalized_artifacts]
+        except ValueError as exc:
+            lowered = str(exc).lower()
+            if "secret-like" in lowered or "pii-like" in lowered or "raw log" in lowered:
+                self._emit_event(
+                    "risk.flagged",
+                    actor="system",
+                    source=source,
+                    data={"reason": "artifact_blocked", "quest_id": quest_id},
+                )
+            _fail("validation_error", str(exc), raise_exc=exc)
+
+        proof_artifact_meta = [
+            {
+                "artifact_type": ref.get("type"),
+                "bytes": int(ref.get("size_bytes", 0)),
+                "sha256": ref.get("sha256"),
+            }
+            for ref in artifact_refs
+        ]
+        self._emit_event(
+            "proof.submitted",
+            actor=actor,
+            source=source,
+            data={
+                "quest_id": quest_id,
+                "proof_tier": tier,
+                "artifact_count": len(proof_artifact_meta),
+                "artifacts": proof_artifact_meta,
+            },
+        )
 
         scoring = q.get("scoring", {})
         base_xp = int(scoring.get("base_xp", 0))
@@ -718,6 +927,33 @@ class RunnerService:
         completion_state["items"] = completions
         _save_json(self.completion_path, completion_state)
         _save_json(self.score_path, score_state)
+
+        self._emit_event(
+            "quest.completed",
+            actor=actor,
+            source=source,
+            data={
+                "quest_id": quest_id,
+                "proof_tier": tier,
+                "risk_level": q.get("risk_level"),
+                "mode_used": mode_used,
+                "xp_awarded": awarded_xp,
+                "timebox_estimate_minutes": self._quest_timebox_minutes(quest),
+                "observed_duration_seconds": 0,
+            },
+        )
+        self._emit_event(
+            "scorecard.updated",
+            actor=actor,
+            source=source,
+            data={
+                "quest_id": quest_id,
+                "xp_delta": awarded_xp,
+                "total_xp": int(score_state.get("total_xp", 0)),
+                "daily_streak": int(score_state.get("daily_streak", 0)),
+                "weekly_streak": int(score_state.get("weekly_streak", 0)),
+            },
+        )
         return completion
 
     def list_proofs(self, quest_id: str | None = None, date_range: str | None = None) -> list[dict[str, Any]]:
@@ -764,6 +1000,24 @@ class RunnerService:
         _save_json(out_path, export)
         return export
 
+    def telemetry_status(self) -> dict[str, Any]:
+        return {
+            "enabled": True,
+            "path": str(self.telemetry.events_path),
+            "event_count": self.telemetry.count_events(),
+        }
+
+    def telemetry_purge(self) -> dict[str, Any]:
+        removed = self.telemetry.purge()
+        return {"path": str(self.telemetry.events_path), "purged": removed}
+
+    def telemetry_export(self, range_value: str, out_path: Path) -> dict[str, Any]:
+        return self.telemetry.export_summary(
+            range_value=range_value,
+            score_state=self._load_score_state(),
+            out_path=out_path,
+        )
+
     def profile_paths(self) -> dict[str, Path]:
         return {
             "human": self.dirs["profiles"] / "human_profile.json",
@@ -786,12 +1040,32 @@ class RunnerService:
             self.init_profiles()
         return _load_json(target, {})
 
-    def put_profile(self, profile_kind: str, profile: dict[str, Any]) -> dict[str, Any]:
+    def put_profile(
+        self,
+        profile_kind: str,
+        profile: dict[str, Any],
+        *,
+        source: str = "cli",
+        actor: str | None = None,
+    ) -> dict[str, Any]:
         if payload_contains_secrets(profile):
+            self._emit_event(
+                "risk.flagged",
+                actor="system",
+                source=source,
+                data={"reason": "profile_secret_like_payload", "profile_kind": profile_kind},
+            )
             raise ValueError("Profile payload appears to contain secret-like content.")
         paths = self.profile_paths()
         profile["updated_at"] = _now_iso()
         _save_json(paths[profile_kind], profile)
+        resolved_actor = actor or ("agent" if profile_kind == "agent" else "human")
+        self._emit_event(
+            "profile.updated",
+            actor=resolved_actor,
+            source=source,
+            data={"profile_kind": profile_kind},
+        )
         return profile
 
     def generate_alignment_snapshot(self) -> dict[str, Any]:

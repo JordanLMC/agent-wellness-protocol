@@ -58,6 +58,11 @@ runner api --host 127.0.0.1 --port 8000
 runner capability ticket --cap exec:shell --ttl-seconds 900 --scope maintenance --reason "human approved"
 runner capability grant --cap exec:shell --ttl-seconds 300 --scope maintenance --ticket <ticket_token>
 
+# telemetry status + export + purge
+runner telemetry status
+runner telemetry export --range 7d --out ./telemetry-summary.json
+runner telemetry purge
+
 # run MCP stdio wrapper against local API
 clawspa-mcp --api-base http://127.0.0.1:8000
 ```
@@ -66,3 +71,4 @@ clawspa-mcp --api-base http://127.0.0.1:8000
 
 - API endpoints are defined in `docs/API_SURFACE.md` and implemented under `runner/`.
 - Core quest pack v0 lives in `quests/packs/wellness.core.v0/`.
+- Telemetry policy and event model are documented in `docs/TELEMETRY.md`.
