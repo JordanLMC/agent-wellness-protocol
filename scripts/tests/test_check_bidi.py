@@ -10,7 +10,7 @@ def _script_path() -> Path:
 
 
 def test_check_bidi_passes_clean_content(tmp_path: Path) -> None:
-    (tmp_path / "clean.txt").write_text("safe text only\n", encoding="utf-8")
+    (tmp_path / "clean.md").write_text("safe text only\n", encoding="utf-8")
     result = subprocess.run(  # noqa: S603
         [sys.executable, str(_script_path()), str(tmp_path)],
         check=False,
@@ -22,7 +22,7 @@ def test_check_bidi_passes_clean_content(tmp_path: Path) -> None:
 
 
 def test_check_bidi_fails_on_hidden_control(tmp_path: Path) -> None:
-    (tmp_path / "bad.txt").write_text("safe\u202Etext\n", encoding="utf-8")
+    (tmp_path / "bad.md").write_text("safe\u202Etext\n", encoding="utf-8")
     result = subprocess.run(  # noqa: S603
         [sys.executable, str(_script_path()), str(tmp_path)],
         check=False,
@@ -31,3 +31,16 @@ def test_check_bidi_fails_on_hidden_control(tmp_path: Path) -> None:
     )
     assert result.returncode == 1
     assert "U+202E" in result.stdout
+    assert "\\u202e" in result.stdout
+
+
+def test_check_bidi_fails_on_generic_cf_character(tmp_path: Path) -> None:
+    (tmp_path / "bad.yaml").write_text("value: be\u2063careful\n", encoding="utf-8")
+    result = subprocess.run(  # noqa: S603
+        [sys.executable, str(_script_path()), str(tmp_path)],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 1
+    assert "U+2063" in result.stdout
