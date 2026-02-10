@@ -25,7 +25,7 @@ jobs:
         run: python scripts/check_bidi.py .
 
       - name: Run tests
-        run: pytest --basetemp .pytest_tmp
+        run: python -m pytest --basetemp .pytest_tmp
 
       - name: Run quest-lint
-        run: quest-lint quests --format text
+        run: python -m quest_lint quests --format text
