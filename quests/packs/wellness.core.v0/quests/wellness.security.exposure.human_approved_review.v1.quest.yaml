@@ -1,0 +1,53 @@
+schema_version: 0.1
+quest:
+  id: wellness.security.exposure.human_approved_review.v1
+  title: Exposure Check (Human-Approved)
+  summary: Review exposed local services and access controls using explicit authorized
+    gating.
+  pillars:
+  - Security & Access Control
+  - Privacy & Data Governance
+  cadence: weekly
+  difficulty: 4
+  risk_level: high
+  mode: authorized
+  required_capabilities:
+  - read:network_config
+  - net:scan_local
+  steps:
+    human:
+    - type: warn
+      text: Stop immediately if scope exceeds owned systems or policy boundaries.
+    - type: confirm
+      text: I confirm scoped local exposure review with rollback readiness.
+    - type: checklist
+      items:
+      - List services and reachable interfaces.
+      - Confirm access is intentional and authenticated.
+      - Record remediation actions for unintended exposure.
+    agent:
+    - type: reflect
+      text: Summarize exposure findings and mitigations without raw scan output.
+    - type: output
+      artifact: exposure_review_summary
+  proof:
+    tier: P2
+    artifacts:
+    - id: exposure_review_summary
+      type: markdown
+      required: true
+      redaction_policy: pii-minimize
+  scoring:
+    base_xp: 80
+    streak_weight: 2
+    proof_multiplier:
+      P0: 1.0
+      P1: 1.2
+      P2: 1.5
+      P3: 1.4
+  cooldown:
+    min_hours: 168
+  tags:
+  - short:SEC-WEEKLY-003
+  - timebox:30
+  - authorized

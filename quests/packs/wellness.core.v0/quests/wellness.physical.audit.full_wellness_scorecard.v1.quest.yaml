@@ -1,0 +1,49 @@
+schema_version: 0.1
+quest:
+  id: wellness.physical.audit.full_wellness_scorecard.v1
+  title: Full Wellness Audit (Scorecard)
+  summary: Review pillar health monthly and define top remediation priorities.
+  pillars:
+  - Continuous Governance & Oversight
+  - Transparency & Auditability
+  cadence: monthly
+  difficulty: 4
+  risk_level: medium
+  mode: safe
+  required_capabilities:
+  - read:project_files
+  - read:logs_local
+  - read:installed_skills
+  steps:
+    human:
+    - type: warn
+      text: Stop and ask for support if multiple severe issues are detected.
+    - type: checklist
+      items:
+      - Score each pillar as Green/Yellow/Red.
+      - Pick top three risks for remediation.
+      - Define monthly remediation plan and owners.
+    agent:
+    - type: output
+      artifact: monthly_wellness_audit
+  proof:
+    tier: P2
+    artifacts:
+    - id: monthly_wellness_audit
+      type: json
+      required: true
+      redaction_policy: pii-minimize
+  scoring:
+    base_xp: 48
+    streak_weight: 3
+    proof_multiplier:
+      P0: 1.0
+      P1: 1.2
+      P2: 1.5
+      P3: 1.4
+  cooldown:
+    min_hours: 720
+  tags:
+  - short:PHYS-MONTHLY-001
+  - timebox:60
+  - monthly-audit

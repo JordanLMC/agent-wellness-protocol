@@ -1,0 +1,47 @@
+schema_version: 0.1
+quest:
+  id: wellness.reliability.runaway.guardrails_check.v1
+  title: Loop & Runaway Guardrails Check
+  summary: Identify tool-call anomalies and add one guardrail for runaway prevention.
+  pillars:
+  - Reliability & Robustness
+  - Transparency & Auditability
+  cadence: weekly
+  difficulty: 2
+  risk_level: medium
+  mode: safe
+  required_capabilities:
+  - read:logs_local
+  - read:agent_config
+  steps:
+    agent:
+    - type: warn
+      text: Stop and ask human if runaway risk appears active.
+    - type: reflect
+      text: Summarize weekly tool-call counts, anomalies, and one guardrail update.
+    - type: output
+      artifact: runaway_guardrail_report
+    human:
+    - type: read
+      text: Review guardrail recommendation and approve next action.
+  proof:
+    tier: P1
+    artifacts:
+    - id: runaway_guardrail_report
+      type: markdown
+      required: true
+      redaction_policy: no-secrets
+  scoring:
+    base_xp: 30
+    streak_weight: 2
+    proof_multiplier:
+      P0: 1.0
+      P1: 1.2
+      P2: 1.5
+      P3: 1.4
+  cooldown:
+    min_hours: 120
+  tags:
+  - short:REL-WEEKLY-002
+  - timebox:15
+  - guardrails

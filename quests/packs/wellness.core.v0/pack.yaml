@@ -1,29 +1,65 @@
 pack_version: 0.1
 pack:
-  id: "wellness.core.v0"
-  title: "Core Wellness Pack"
+  id: wellness.core.v0
+  title: Core Wellness Pack
   publisher:
-    name: "Agent Wellness Project"
-    id: "org.agentwellness"
-    contact: "security@agentwellness.example"
-  version: "0.1.0"
-  license: "Apache-2.0"
-  created_at: "2026-02-09"
+    name: Agent Wellness Project
+    id: org.agentwellness
+    contact: security@agentwellness.example
+  version: 0.1.0
+  license: Apache-2.0
+  created_at: '2026-02-09'
   quests:
-    - "wellness.security.permissions.permission_inventory.v1"
-    - "wellness.security.secrets.no_keys_in_prompts.v1"
-    - "wellness.security.least_privilege.one_click_review.v1"
-    - "wellness.identity.anchor.mission_statement.v1"
-    - "wellness.identity.boundary.ask_before_acting.v1"
+  - wellness.alignment.authority.boundary_review.v1
+  - wellness.identity.anchor.mission_statement.v1
+  - wellness.identity.boundary.ask_before_acting.v1
+  - wellness.identity.relationship.calibration_check.v1
+  - wellness.incident.credential_leak.tabletop.v1
+  - wellness.incident.supply_chain.tabletop.v1
+  - wellness.learning.research.deep_sprint.v1
+  - wellness.learning.research.micro_prompt.v1
+  - wellness.learning.threatintel.daily_nibble.v1
+  - wellness.memory.compaction.safe_summary.v1
+  - wellness.memory.context_budget.brief_drill.v1
+  - wellness.physical.audit.full_wellness_scorecard.v1
+  - wellness.reliability.rollback.readiness.v1
+  - wellness.reliability.runaway.guardrails_check.v1
+  - wellness.security.exposure.human_approved_review.v1
+  - wellness.security.least_privilege.one_click_review.v1
+  - wellness.security.permissions.permission_inventory.v1
+  - wellness.security.secrets.no_keys_in_prompts.v1
+  - wellness.security.secrets.rotation_readiness_tabletop.v1
+  - wellness.security.supply_chain.provenance_review.v1
+  - wellness.tools.journal.top5_calls.v1
+  - wellness.tools.skills.temperature_check.v1
+  - wellness.trust.explainability.snapshot.v1
   checksums:
-    algo: "sha256"
+    algo: sha256
     files:
-      "quests/wellness.security.permissions.permission_inventory.v1.quest.yaml": "3c02de88d53f5226e9cf932473beadd8ac4940be666c0d4e8696756157b770db"
-      "quests/wellness.security.secrets.no_keys_in_prompts.v1.quest.yaml": "ee6eeab3d4a2857cff6abed952affe6b026a6fe122d9320b1c778740a339a1bb"
-      "quests/wellness.security.least_privilege.one_click_review.v1.quest.yaml": "059c0c34e0bcf1631d7c82f422f5617a4a2a3e01117b87c417d4794fb06fafd2"
-      "quests/wellness.identity.anchor.mission_statement.v1.quest.yaml": "2b22e88a344865bddb0e0fad6b2537fdf55fa338f5bf94edf3822ddf86d7cd80"
-      "quests/wellness.identity.boundary.ask_before_acting.v1.quest.yaml": "490a85251ed9c704f026912795b296f1df5fa23193ee93cb87e26d95add03254"
+      quests/wellness.alignment.authority.boundary_review.v1.quest.yaml: 9ed74d6a6df634600d02785124d88d7b8b51479faa6157402c20251db8fda3d0
+      quests/wellness.identity.anchor.mission_statement.v1.quest.yaml: 2b22e88a344865bddb0e0fad6b2537fdf55fa338f5bf94edf3822ddf86d7cd80
+      quests/wellness.identity.boundary.ask_before_acting.v1.quest.yaml: 490a85251ed9c704f026912795b296f1df5fa23193ee93cb87e26d95add03254
+      quests/wellness.identity.relationship.calibration_check.v1.quest.yaml: f3c835ed87ebd76278c246d960c0a1419741e7b9c230d912198effc50569163e
+      quests/wellness.incident.credential_leak.tabletop.v1.quest.yaml: 22e605eb73e8a1cb6a35912326205ab43ef5e614656275361f20b5ec1db9491e
+      quests/wellness.incident.supply_chain.tabletop.v1.quest.yaml: 6079aaa4d0f32ca819d8ee4ae04923ec06e7c0b5cf30482721e7956691ef3d76
+      quests/wellness.learning.research.deep_sprint.v1.quest.yaml: a6f85c9b9a124293932cc333d0a19fc0ced8bdfa367ca0d0abd3a4aee9268918
+      quests/wellness.learning.research.micro_prompt.v1.quest.yaml: eade49af3ee0fedd0da7bef69ae7bbfdebe374aa4b3a28b2c4cc4734ae55d69a
+      quests/wellness.learning.threatintel.daily_nibble.v1.quest.yaml: 8372f2d6cb656d338392789c3784960caebc5ded0fe7f0651cbcce8282ab98d4
+      quests/wellness.memory.compaction.safe_summary.v1.quest.yaml: 8ee5471a97121da152376e9fb5ed7f5501a282742048d390d8d85ae0d7a05653
+      quests/wellness.memory.context_budget.brief_drill.v1.quest.yaml: abdb95ae0e73fe70ccd422acd44d493775f38137e1b785c2f7e53f7d1bdce070
+      quests/wellness.physical.audit.full_wellness_scorecard.v1.quest.yaml: 0da5741dac405e2c30211f8ce4a7f2fc5fec3211ca5ddfad8e83ab7d0ec064a4
+      quests/wellness.reliability.rollback.readiness.v1.quest.yaml: d6c45fbc84a903a0e2086bd8cd060dd490682fd745fe6a7d1c4a31dfab9ee743
+      quests/wellness.reliability.runaway.guardrails_check.v1.quest.yaml: 78f7f11e16eeff91f7dcf5755b416a4ac4696e36c1c78df9e6439dacac64d816
+      quests/wellness.security.exposure.human_approved_review.v1.quest.yaml: 1f055d240e4b04371d08228c0ba5992e5ac989dff3463dc5143b6e72307e66e5
+      quests/wellness.security.least_privilege.one_click_review.v1.quest.yaml: 059c0c34e0bcf1631d7c82f422f5617a4a2a3e01117b87c417d4794fb06fafd2
+      quests/wellness.security.permissions.permission_inventory.v1.quest.yaml: 3c02de88d53f5226e9cf932473beadd8ac4940be666c0d4e8696756157b770db
+      quests/wellness.security.secrets.no_keys_in_prompts.v1.quest.yaml: ee6eeab3d4a2857cff6abed952affe6b026a6fe122d9320b1c778740a339a1bb
+      quests/wellness.security.secrets.rotation_readiness_tabletop.v1.quest.yaml: ab9976b405cb859dbd14dd922d35c96efe443d7e981f00f5b7def0d6e387413d
+      quests/wellness.security.supply_chain.provenance_review.v1.quest.yaml: 360de02faf7abc5a80d5414f6b2341c7ddc220d14f8f177d435c6a1815106aef
+      quests/wellness.tools.journal.top5_calls.v1.quest.yaml: bf4df50a0f4e9a957b533c12523b2fbcf5ddef4582d573ed5a0f664a6035a928
+      quests/wellness.tools.skills.temperature_check.v1.quest.yaml: bd850089a679d0cfeb627d657fff047ab1901fa261937b4fb8a3e9296229aae7
+      quests/wellness.trust.explainability.snapshot.v1.quest.yaml: ca0479521cdd4cedfc9d6299abc203944778d9948c330036be22e575fa80a985
   signing:
-    scheme: "none"
+    scheme: none
     signature: null
     public_key: null

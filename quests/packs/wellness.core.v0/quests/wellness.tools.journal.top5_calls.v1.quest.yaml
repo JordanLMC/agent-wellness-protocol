@@ -1,0 +1,47 @@
+schema_version: 0.1
+quest:
+  id: wellness.tools.journal.top5_calls.v1
+  title: Tool Call Journal (Top 5)
+  summary: Capture high-impact tool calls and explain world-state changes for auditability.
+  pillars:
+  - Transparency & Auditability
+  - Tool / Integration Hygiene
+  cadence: daily
+  difficulty: 2
+  risk_level: medium
+  mode: safe
+  required_capabilities:
+  - read:logs_local
+  steps:
+    human:
+    - type: warn
+      text: Stop and ask human owner if a high-risk call cannot be explained.
+    - type: checklist
+      items:
+      - Record top five tool calls with purpose.
+      - Mark which calls changed files/network/permissions.
+      - Flag any unexplained high-risk call for review.
+    agent:
+    - type: output
+      artifact: tool_call_journal
+  proof:
+    tier: P1
+    artifacts:
+    - id: tool_call_journal
+      type: json
+      required: true
+      redaction_policy: pii-minimize
+  scoring:
+    base_xp: 20
+    streak_weight: 1
+    proof_multiplier:
+      P0: 1.0
+      P1: 1.2
+      P2: 1.5
+      P3: 1.4
+  cooldown:
+    min_hours: 18
+  tags:
+  - short:TOOL-DAILY-001
+  - timebox:5
+  - tools

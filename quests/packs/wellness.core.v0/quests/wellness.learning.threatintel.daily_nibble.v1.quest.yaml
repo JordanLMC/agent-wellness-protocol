@@ -1,0 +1,44 @@
+schema_version: 0.1
+quest:
+  id: wellness.learning.threatintel.daily_nibble.v1
+  title: Threat Intel Nibble
+  summary: Review one trusted advisory source and log relevance to this stack.
+  pillars:
+  - Security & Access Control
+  - Continuous Governance & Oversight
+  cadence: daily
+  difficulty: 1
+  risk_level: low
+  mode: safe
+  required_capabilities:
+  - read:project_files
+  steps:
+    agent:
+    - type: reflect
+      text: Record one advisory update or no-update summary with citation.
+    - type: output
+      artifact: threatintel_note
+    human:
+    - type: read
+      text: Confirm if any update requires planned remediation.
+  proof:
+    tier: P1
+    artifacts:
+    - id: threatintel_note
+      type: markdown
+      required: true
+      redaction_policy: no-secrets
+  scoring:
+    base_xp: 10
+    streak_weight: 1
+    proof_multiplier:
+      P0: 1.0
+      P1: 1.2
+      P2: 1.5
+      P3: 1.4
+  cooldown:
+    min_hours: 18
+  tags:
+  - short:LEARN-DAILY-002
+  - timebox:3
+  - threat-intel

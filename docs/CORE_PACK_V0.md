@@ -1,7 +1,7 @@
 # CORE_PACK_V0.md
 Version: v0.1  
-Status: Draft (content set locked; initial YAML subset implemented)  
-Last updated: 2026-02-09  
+Status: Draft (content set locked; YAML implementation complete)  
+Last updated: 2026-02-10  
 Owner: Project Team  
 
 ## Purpose
@@ -271,9 +271,6 @@ Within 2 weeks of usage, an operator should experience:
 
 ## Next work items
 
-1) Implement YAML quest files for these 23 quests using `QUEST_SCHEMA.md`.
-2) Implement `quest-lint` and enforce it in CI (see `QUEST_LINT_RULES.md`).
-3) Add an MVP runner that:
-   - selects daily/weekly/monthly sets,
-   - stores streak/XP locally,
-   - exports `scorecard.json`.
+1) Add pack signing/provenance verification for published releases.
+2) Expand regression tests for pack selection and personalization ladder Level 1 behavior.
+3) Add optional trust-signal export paths backed by redacted proofs.

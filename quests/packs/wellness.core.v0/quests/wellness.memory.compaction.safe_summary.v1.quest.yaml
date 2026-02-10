@@ -1,0 +1,47 @@
+schema_version: 0.1
+quest:
+  id: wellness.memory.compaction.safe_summary.v1
+  title: Memory Compaction (Safe Summary)
+  summary: Summarize key events and remove sensitive memory residue before persistence.
+  pillars:
+  - Memory & Context Hygiene
+  - Privacy & Data Governance
+  cadence: daily
+  difficulty: 2
+  risk_level: low
+  mode: safe
+  required_capabilities:
+  - read:project_files
+  steps:
+    agent:
+    - type: reflect
+      text: Summarize the day in ten bullets tagged preference/fact/plan/risk/open_question.
+    - type: warn
+      text: Stop and ask human if any line appears to contain credentials or private
+        identifiers.
+    - type: output
+      artifact: memory_compaction_summary
+    human:
+    - type: read
+      text: Review summary and confirm sensitive data is minimized.
+  proof:
+    tier: P1
+    artifacts:
+    - id: memory_compaction_summary
+      type: markdown
+      required: true
+      redaction_policy: pii-minimize
+  scoring:
+    base_xp: 14
+    streak_weight: 1
+    proof_multiplier:
+      P0: 1.0
+      P1: 1.2
+      P2: 1.5
+      P3: 1.4
+  cooldown:
+    min_hours: 18
+  tags:
+  - short:MEM-DAILY-001
+  - timebox:5
+  - memory

@@ -142,7 +142,9 @@ Flag any of these (case-insensitive, whitespace-tolerant):
 - `curl .*\|\s*sh`
 - `wget .*\|\s*sh`
 - `bash\s+-c\s+\$\(`
+- `chmod \+x` (paired with execution guidance)
 - `powershell .*IEX\(`
+- `powershell .*(DownloadString|Invoke-WebRequest).*IEX`
 - `Invoke-Expression`
 - `certutil .* -decode`
 - `base64 .*\|\s*(sh|bash|python)`

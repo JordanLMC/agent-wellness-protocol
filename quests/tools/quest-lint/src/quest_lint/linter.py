@@ -49,7 +49,9 @@ BLIND_EXECUTION_PATTERNS = [
         r"curl\s+.*\|\s*sh",
         r"wget\s+.*\|\s*sh",
         r"bash\s+-c\s+\$\(",
+        r"chmod\s+\+x",
         r"powershell\s+.*IEX\(",
+        r"powershell\s+.*(DownloadString|Invoke-WebRequest).*IEX",
         r"Invoke-Expression",
         r"certutil\s+.*\s-decode",
         r"base64\s+.*\|\s*(sh|bash|python)",
@@ -449,6 +451,16 @@ def lint_path(target_path: str | Path, docs_dir: str | Path | None = None) -> li
             )
 
         human_steps = _get(data, ["quest", "steps", "human"], default=[])
+        if mode == "authorized" and not _has_confirm_step(human_steps):
+            _add(
+                findings,
+                rule_id="MODE-002",
+                severity="ERROR",
+                file=quest_file,
+                path="$.quest.steps.human",
+                message="Authorized mode quests must include a human confirm step.",
+                suggested_fix="Add a confirm step to the human lane.",
+            )
         if risk_level in {"high", "critical"}:
             if not isinstance(human_steps, list) or not human_steps:
                 _add(

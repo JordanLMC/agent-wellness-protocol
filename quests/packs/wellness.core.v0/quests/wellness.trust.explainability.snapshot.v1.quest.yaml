@@ -1,0 +1,45 @@
+schema_version: 0.1
+quest:
+  id: wellness.trust.explainability.snapshot.v1
+  title: Explainability Snapshot
+  summary: Document one representative task with intent, steps, outcome, and risk
+    controls.
+  pillars:
+  - User Experience & Trust Calibration
+  - Transparency & Auditability
+  cadence: weekly
+  difficulty: 2
+  risk_level: low
+  mode: safe
+  required_capabilities:
+  - read:project_files
+  steps:
+    agent:
+    - type: reflect
+      text: Write intent -> steps -> tools -> outcome -> risk controls for one task.
+    - type: output
+      artifact: explainability_snapshot
+    human:
+    - type: read
+      text: Confirm snapshot is clear and auditable.
+  proof:
+    tier: P1
+    artifacts:
+    - id: explainability_snapshot
+      type: markdown
+      required: true
+      redaction_policy: no-secrets
+  scoring:
+    base_xp: 18
+    streak_weight: 2
+    proof_multiplier:
+      P0: 1.0
+      P1: 1.2
+      P2: 1.5
+      P3: 1.4
+  cooldown:
+    min_hours: 120
+  tags:
+  - short:TRUST-WEEKLY-001
+  - timebox:15
+  - trust

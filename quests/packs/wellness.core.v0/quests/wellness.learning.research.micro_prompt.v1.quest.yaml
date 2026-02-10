@@ -1,0 +1,44 @@
+schema_version: 0.1
+quest:
+  id: wellness.learning.research.micro_prompt.v1
+  title: Deep Research Prompt (Micro)
+  summary: Run one focused research prompt and capture actionable safe improvements.
+  pillars:
+  - Skill Competence & Adaptability
+  - Continuous Governance & Oversight
+  cadence: daily
+  difficulty: 2
+  risk_level: low
+  mode: safe
+  required_capabilities:
+  - read:project_files
+  steps:
+    agent:
+    - type: reflect
+      text: Capture three actionable takeaways and one non-executing policy proposal.
+    - type: output
+      artifact: micro_research_note
+    human:
+    - type: read
+      text: Review proposal and decide whether to schedule follow-up.
+  proof:
+    tier: P1
+    artifacts:
+    - id: micro_research_note
+      type: markdown
+      required: true
+      redaction_policy: no-secrets
+  scoring:
+    base_xp: 15
+    streak_weight: 1
+    proof_multiplier:
+      P0: 1.0
+      P1: 1.2
+      P2: 1.5
+      P3: 1.4
+  cooldown:
+    min_hours: 18
+  tags:
+  - short:LEARN-DAILY-001
+  - timebox:10
+  - learning
