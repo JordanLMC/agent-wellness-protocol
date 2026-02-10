@@ -33,6 +33,9 @@ quest-lint quests
 # run tests
 pytest
 
+# run full local verification sequence
+./scripts/verify.sh
+
 # show daily plan
 runner plan --date 2026-02-09
 
@@ -50,6 +53,10 @@ runner export-scorecard --out ./scorecard.json
 
 # run local API (localhost only)
 runner api --host 127.0.0.1 --port 8000
+
+# create human approval ticket and grant scoped capability
+runner capability ticket --cap exec:shell --ttl-seconds 900 --scope maintenance --reason "human approved"
+runner capability grant --cap exec:shell --ttl-seconds 300 --scope maintenance --ticket <ticket_token>
 
 # run MCP stdio wrapper against local API
 clawspa-mcp --api-base http://127.0.0.1:8000

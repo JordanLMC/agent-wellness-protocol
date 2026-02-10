@@ -85,8 +85,9 @@ This is a **conceptual API** for v0.1. We can implement it as:
 ### Capability grants (Authorized Mode control)
 - `GET /v1/capabilities`
 - `POST /v1/capabilities/grant`
-  - requires explicit user confirmation (UI-mediated)
-  - includes scope and TTL
+  - requires explicit user confirmation via a short-lived local grant ticket
+  - includes scope, TTL, and `ticket_token` (single use)
+  - ticket issuance is local-human mediated (CLI/runner UX), not agent-issued
 - `POST /v1/capabilities/revoke`
 
 ---
@@ -103,6 +104,7 @@ The MCP server should expose tools that map cleanly to the API:
 - `update_agent_profile(profile_patch)` → `PUT /v1/profiles/agent`
 
 > MCP tool schemas should avoid accepting raw file contents or secrets.
+> MCP tools should reject oversized blobs and secret/PII-like payloads.
 
 MCP transport policy (runner wrapper):
 - default `api-base` target is localhost only (`127.0.0.1`, `::1`, `localhost`)

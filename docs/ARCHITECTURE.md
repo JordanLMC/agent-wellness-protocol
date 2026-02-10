@@ -129,6 +129,7 @@ Not allowed:
 ### Authorized Mode (explicit)
 Allowed only after:
 - human confirmation step
+- human-issued short-lived grant ticket (single-use)
 - scoped capabilities are granted
 - time limit applied (auto revert)
 

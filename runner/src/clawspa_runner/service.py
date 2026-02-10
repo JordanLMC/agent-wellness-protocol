@@ -10,7 +10,13 @@ from typing import Any
 
 from .paths import agent_home, ensure_home_dirs
 from .quests import QuestRepository
-from .security import payload_contains_secrets
+from .security import payload_contains_pii, payload_contains_secrets, payload_requests_raw_logs
+
+
+STATE_SCHEMA_VERSION = "0.1"
+TIER_RANK = {"P0": 0, "P1": 1, "P2": 2, "P3": 3}
+MAX_INLINE_ARTIFACT_CHARS = 2048
+MAX_ARTIFACT_FILE_BYTES = 512 * 1024
 
 
 def _now_iso() -> str:
@@ -29,7 +35,9 @@ def _load_json(path: Path, default: Any) -> Any:
 
 def _save_json(path: Path, value: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(value, indent=2), encoding="utf-8")
+    temp_path = path.parent / f".{path.name}.tmp"
+    temp_path.write_text(json.dumps(value, indent=2), encoding="utf-8")
+    temp_path.replace(path)
 
 
 def _risky_capability(capability: str) -> bool:
@@ -118,11 +126,27 @@ class RunnerService:
     def capability_path(self) -> Path:
         return self.dirs["state"] / "capabilities.json"
 
+    @property
+    def ticket_path(self) -> Path:
+        return self.dirs["state"] / "grant_tickets.json"
+
+    @property
+    def migration_path(self) -> Path:
+        return self.dirs["state"] / "state_meta.json"
+
     def _ensure_state_files(self) -> None:
+        if not self.migration_path.exists():
+            _save_json(self.migration_path, {"state_schema_version": STATE_SCHEMA_VERSION})
+        else:
+            meta = _load_json(self.migration_path, {"state_schema_version": "0.0"})
+            if meta.get("state_schema_version") != STATE_SCHEMA_VERSION:
+                self._migrate_state(meta.get("state_schema_version", "0.0"), STATE_SCHEMA_VERSION)
+
         if not self.score_path.exists():
             _save_json(
                 self.score_path,
                 {
+                    "state_schema_version": STATE_SCHEMA_VERSION,
                     "total_xp": 0,
                     "daily_streak": 0,
                     "weekly_streak": 0,
@@ -133,57 +157,238 @@ class RunnerService:
                 },
             )
         if not self.completion_path.exists():
-            _save_json(self.completion_path, [])
+            _save_json(self.completion_path, {"state_schema_version": STATE_SCHEMA_VERSION, "items": []})
         if not self.capability_path.exists():
-            _save_json(self.capability_path, {"grants": []})
+            _save_json(self.capability_path, {"state_schema_version": STATE_SCHEMA_VERSION, "grants": []})
+        if not self.ticket_path.exists():
+            _save_json(self.ticket_path, {"state_schema_version": STATE_SCHEMA_VERSION, "tickets": []})
+
+    def _migrate_state(self, old_version: str, new_version: str) -> None:
+        # v0.1 currently upgrades legacy list/object layouts to schema-versioned wrappers.
+        if self.completion_path.exists():
+            completions = _load_json(self.completion_path, [])
+            if isinstance(completions, list):
+                _save_json(self.completion_path, {"state_schema_version": new_version, "items": completions})
+        if self.capability_path.exists():
+            capabilities = _load_json(self.capability_path, {"grants": []})
+            if isinstance(capabilities, dict) and "state_schema_version" not in capabilities:
+                capabilities["state_schema_version"] = new_version
+                _save_json(self.capability_path, capabilities)
+        if self.score_path.exists():
+            score = _load_json(self.score_path, {})
+            if isinstance(score, dict) and "state_schema_version" not in score:
+                score["state_schema_version"] = new_version
+                _save_json(self.score_path, score)
+        if self.ticket_path.exists():
+            tickets = _load_json(self.ticket_path, {"tickets": []})
+            if isinstance(tickets, dict) and "state_schema_version" not in tickets:
+                tickets["state_schema_version"] = new_version
+                _save_json(self.ticket_path, tickets)
+        _save_json(self.migration_path, {"state_schema_version": new_version, "migrated_from": old_version, "updated_at": _now_iso()})
 
     def validate_content(self) -> list[dict[str, str]]:
         return self.quests.lint()
 
+    def _load_score_state(self) -> dict[str, Any]:
+        data = _load_json(
+            self.score_path,
+            {
+                "state_schema_version": STATE_SCHEMA_VERSION,
+                "total_xp": 0,
+                "daily_streak": 0,
+                "weekly_streak": 0,
+                "last_completion_date": None,
+                "last_completion_week": None,
+                "quest_last_completion": {},
+                "badge_ids": [],
+            },
+        )
+        if isinstance(data, dict):
+            data.setdefault("state_schema_version", STATE_SCHEMA_VERSION)
+            data.setdefault("quest_last_completion", {})
+            data.setdefault("badge_ids", [])
+            return data
+        return {
+            "state_schema_version": STATE_SCHEMA_VERSION,
+            "total_xp": 0,
+            "daily_streak": 0,
+            "weekly_streak": 0,
+            "last_completion_date": None,
+            "last_completion_week": None,
+            "quest_last_completion": {},
+            "badge_ids": [],
+        }
+
+    def _load_completions_state(self) -> dict[str, Any]:
+        data = _load_json(self.completion_path, {"state_schema_version": STATE_SCHEMA_VERSION, "items": []})
+        if isinstance(data, list):
+            return {"state_schema_version": STATE_SCHEMA_VERSION, "items": data}
+        if not isinstance(data, dict):
+            return {"state_schema_version": STATE_SCHEMA_VERSION, "items": []}
+        data.setdefault("state_schema_version", STATE_SCHEMA_VERSION)
+        if not isinstance(data.get("items"), list):
+            data["items"] = []
+        return data
+
+    def _load_capabilities_state(self) -> dict[str, Any]:
+        data = _load_json(self.capability_path, {"state_schema_version": STATE_SCHEMA_VERSION, "grants": []})
+        if not isinstance(data, dict):
+            return {"state_schema_version": STATE_SCHEMA_VERSION, "grants": []}
+        data.setdefault("state_schema_version", STATE_SCHEMA_VERSION)
+        if not isinstance(data.get("grants"), list):
+            data["grants"] = []
+        return data
+
+    def _load_ticket_state(self) -> dict[str, Any]:
+        data = _load_json(self.ticket_path, {"state_schema_version": STATE_SCHEMA_VERSION, "tickets": []})
+        if not isinstance(data, dict):
+            return {"state_schema_version": STATE_SCHEMA_VERSION, "tickets": []}
+        data.setdefault("state_schema_version", STATE_SCHEMA_VERSION)
+        if not isinstance(data.get("tickets"), list):
+            data["tickets"] = []
+        return data
+
+    def _parse_iso_dt(self, value: str) -> datetime | None:
+        try:
+            parsed = datetime.fromisoformat(value)
+            if parsed.tzinfo is None:
+                parsed = parsed.replace(tzinfo=UTC)
+            return parsed
+        except (TypeError, ValueError):
+            return None
+
+    def _normalize_capabilities(self, capabilities: list[str]) -> list[str]:
+        normalized: list[str] = []
+        seen = set()
+        for capability in capabilities:
+            if not isinstance(capability, str):
+                continue
+            value = capability.strip()
+            if not value:
+                continue
+            if value in seen:
+                continue
+            normalized.append(value)
+            seen.add(value)
+        return normalized
+
     def _active_grants(self) -> list[dict[str, Any]]:
-        data = _load_json(self.capability_path, {"grants": []})
+        data = self._load_capabilities_state()
         now = datetime.now(tz=UTC)
         active: list[dict[str, Any]] = []
         for grant in data.get("grants", []):
             if grant.get("revoked"):
                 continue
             expires_at = grant.get("expires_at")
-            if not expires_at:
+            expiry_dt = self._parse_iso_dt(expires_at)
+            if expiry_dt is None:
                 continue
-            if datetime.fromisoformat(expires_at) > now:
+            if expiry_dt > now:
                 active.append(grant)
         return active
 
     def get_capabilities(self) -> dict[str, Any]:
-        return {"mode_default": "safe", "active_grants": self._active_grants()}
+        now = datetime.now(tz=UTC)
+        tickets_data = self._load_ticket_state()
+        active_tickets: list[dict[str, Any]] = []
+        for ticket in tickets_data.get("tickets", []):
+            expiry_dt = self._parse_iso_dt(ticket.get("expires_at"))
+            if ticket.get("used") or expiry_dt is None or expiry_dt <= now:
+                continue
+            active_tickets.append(
+                {
+                    "ticket_id": ticket.get("ticket_id"),
+                    "scope": ticket.get("scope"),
+                    "capabilities": ticket.get("capabilities", []),
+                    "expires_at": ticket.get("expires_at"),
+                }
+            )
+        return {"mode_default": "safe", "active_grants": self._active_grants(), "active_tickets": active_tickets}
 
-    def grant_capabilities(self, capabilities: list[str], ttl_seconds: int, scope: str, confirmed: bool) -> dict[str, Any]:
-        if not confirmed:
-            raise ValueError("Explicit confirmation is required for capability grants.")
+    def create_grant_ticket(self, capabilities: list[str], ttl_seconds: int, scope: str, reason: str) -> dict[str, Any]:
         if ttl_seconds <= 0:
             raise ValueError("ttl_seconds must be positive.")
-        if payload_contains_secrets({"capabilities": capabilities, "scope": scope}):
-            raise ValueError("Secret-like content detected in capability grant payload.")
+        normalized_capabilities = self._normalize_capabilities(capabilities)
+        if not normalized_capabilities:
+            raise ValueError("At least one capability is required.")
+        if ttl_seconds > 24 * 60 * 60:
+            raise ValueError("ttl_seconds must be 86400 or less.")
+        payload = {"capabilities": normalized_capabilities, "scope": scope, "reason": reason}
+        if payload_contains_secrets(payload) or payload_contains_pii(payload):
+            raise ValueError("Sensitive content detected in grant ticket payload.")
 
-        data = _load_json(self.capability_path, {"grants": []})
+        data = self._load_ticket_state()
         now = datetime.now(tz=UTC)
+        token = str(uuid.uuid4())
+        ticket = {
+            "ticket_id": str(uuid.uuid4()),
+            "token": token,
+            "capabilities": normalized_capabilities,
+            "scope": scope,
+            "reason": reason,
+            "created_at": now.isoformat(),
+            "expires_at": (now + timedelta(seconds=ttl_seconds)).isoformat(),
+            "used": False,
+        }
+        data["tickets"].append(ticket)
+        _save_json(self.ticket_path, data)
+        return ticket
+
+    def grant_capabilities_with_ticket(self, capabilities: list[str], ttl_seconds: int, scope: str, ticket_token: str) -> dict[str, Any]:
+        if ttl_seconds <= 0:
+            raise ValueError("ttl_seconds must be positive.")
+        normalized_capabilities = self._normalize_capabilities(capabilities)
+        if not normalized_capabilities:
+            raise ValueError("At least one capability is required.")
+        if payload_contains_secrets({"capabilities": normalized_capabilities, "scope": scope, "ticket": ticket_token}):
+            raise ValueError("Secret-like content detected in capability grant payload.")
+        if not ticket_token or not isinstance(ticket_token, str):
+            raise ValueError("ticket_token is required.")
+
+        ticket_data = self._load_ticket_state()
+        now = datetime.now(tz=UTC)
+        matched_ticket: dict[str, Any] | None = None
+        for ticket in ticket_data.get("tickets", []):
+            if ticket.get("token") != ticket_token:
+                continue
+            if ticket.get("used"):
+                raise ValueError("Grant ticket already used.")
+            expiry_dt = self._parse_iso_dt(ticket.get("expires_at"))
+            if expiry_dt is None or expiry_dt <= now:
+                raise ValueError("Grant ticket expired.")
+            if sorted(ticket.get("capabilities", [])) != sorted(normalized_capabilities):
+                raise ValueError("Ticket capabilities do not match request.")
+            if ticket.get("scope") != scope:
+                raise ValueError("Ticket scope does not match request.")
+            if now + timedelta(seconds=ttl_seconds) > expiry_dt:
+                raise ValueError("Grant ttl_seconds cannot exceed the ticket expiry window.")
+            matched_ticket = ticket
+            break
+        if matched_ticket is None:
+            raise ValueError("Invalid grant ticket token.")
+
+        data = self._load_capabilities_state()
         grant = {
             "grant_id": str(uuid.uuid4()),
-            "capabilities": capabilities,
+            "capabilities": normalized_capabilities,
             "scope": scope,
-            "confirmed": True,
+            "ticket_id": matched_ticket["ticket_id"],
             "created_at": now.isoformat(),
             "expires_at": (now + timedelta(seconds=ttl_seconds)).isoformat(),
             "revoked": False,
         }
         data["grants"].append(grant)
         _save_json(self.capability_path, data)
+
+        matched_ticket["used"] = True
+        matched_ticket["used_at"] = now.isoformat()
+        _save_json(self.ticket_path, ticket_data)
         return grant
 
     def revoke_capability(self, grant_id: str | None = None, capability: str | None = None) -> dict[str, Any]:
         if not grant_id and not capability:
             raise ValueError("Provide grant_id or capability.")
-        data = _load_json(self.capability_path, {"grants": []})
+        data = self._load_capabilities_state()
         changed = 0
         for grant in data.get("grants", []):
             if grant.get("revoked"):
@@ -237,11 +442,44 @@ class RunnerService:
         pillars = set(quest.get("quest", {}).get("pillars", []))
         if "Security & Access Control" in pillars:
             return "security"
-        if "Memory & Context Hygiene" in pillars:
+        if "Memory & Context Hygiene" in pillars or "Reliability & Robustness" in pillars:
             return "memory"
-        if "Identity & Authenticity" in pillars or "Alignment & Safety (Behavioral)" in pillars:
+        if (
+            "Identity & Authenticity" in pillars
+            or "Alignment & Safety (Behavioral)" in pillars
+            or "User Experience & Trust Calibration" in pillars
+        ):
             return "purpose"
+        if "Tool / Integration Hygiene" in pillars:
+            return "tool"
+        if "Skill Competence & Adaptability" in pillars:
+            return "learning"
         return "other"
+
+    def _should_add_bonus_slot(self, target_date: date) -> bool:
+        profile = self.get_profile("human")
+        minutes = profile.get("preferences", {}).get("session_minutes_per_day", 10)
+        if isinstance(minutes, int) and minutes >= 12:
+            return True
+        weekday = target_date.weekday()
+        # Deterministic fallback: allow one bonus slot every Wednesday.
+        return weekday == 2
+
+    def _choose_bonus(self, ranked: list[dict[str, Any]], selected: list[dict[str, Any]], target_date: date) -> dict[str, Any] | None:
+        if not self._should_add_bonus_slot(target_date):
+            return None
+        parity = int(hashlib.sha256(target_date.isoformat().encode("utf-8")).hexdigest(), 16) % 2
+        preferred = "tool" if parity == 0 else "learning"
+
+        for quest in ranked:
+            if quest in selected:
+                continue
+            if self._bucket(quest) == preferred:
+                return quest
+        for quest in ranked:
+            if quest not in selected:
+                return quest
+        return None
 
     def generate_daily_plan(self, target_date: date) -> dict[str, Any]:
         all_daily = [q for q in self.list_quests().values() if q.get("quest", {}).get("cadence") == "daily"]
@@ -270,6 +508,10 @@ class RunnerService:
             if quest not in selected:
                 selected.append(quest)
 
+        bonus = self._choose_bonus(ranked, selected, target_date)
+        if bonus is not None and bonus not in selected:
+            selected.append(bonus)
+
         plan = {
             "date": key,
             "generated_at": _now_iso(),
@@ -285,16 +527,53 @@ class RunnerService:
             return _load_json(plan_file, {})
         return self.generate_daily_plan(target_date)
 
-    def _artifact_ref(self, artifact: str) -> dict[str, str]:
+    def _validate_artifact_text(self, text: str, *, source: str) -> None:
+        if payload_contains_secrets(text):
+            raise ValueError(f"{source} appears to contain secret-like content.")
+        if payload_contains_pii(text):
+            raise ValueError(f"{source} appears to contain PII-like content.")
+        if payload_requests_raw_logs(text):
+            raise ValueError(f"{source} appears to contain raw log content.")
+
+    def _artifact_ref(self, artifact: str) -> dict[str, Any]:
         candidate = Path(artifact).expanduser()
         if candidate.exists():
-            return {"type": "path", "ref": str(candidate.resolve())}
-        return {"type": "inline", "ref": artifact[:1024]}
+            size_bytes = candidate.stat().st_size
+            if size_bytes > MAX_ARTIFACT_FILE_BYTES:
+                raise ValueError(
+                    f"Artifact file exceeds {MAX_ARTIFACT_FILE_BYTES} bytes. "
+                    "Provide a smaller redacted summary artifact."
+                )
+            raw = candidate.read_bytes()
+            try:
+                text_preview = raw[:8192].decode("utf-8")
+            except UnicodeDecodeError as exc:
+                raise ValueError("Artifact files must be UTF-8 text in v0.1.") from exc
+            self._validate_artifact_text(text_preview, source=f"Artifact file '{candidate}'")
+            return {
+                "type": "path",
+                "ref": str(candidate.resolve()),
+                "sha256": hashlib.sha256(raw).hexdigest(),
+                "size_bytes": size_bytes,
+            }
+
+        if len(artifact) > MAX_INLINE_ARTIFACT_CHARS:
+            raise ValueError(f"Inline artifact text exceeds {MAX_INLINE_ARTIFACT_CHARS} characters.")
+        self._validate_artifact_text(artifact, source="Inline artifact")
+        return {
+            "type": "inline",
+            "ref": artifact[:256],
+            "sha256": hashlib.sha256(artifact.encode("utf-8")).hexdigest(),
+            "size_bytes": len(artifact.encode("utf-8")),
+        }
 
     def _can_run_quest(self, quest: dict[str, Any]) -> tuple[bool, str]:
         q = quest.get("quest", {})
         required = q.get("required_capabilities", [])
+        mode = q.get("mode", "safe")
         risky_required = [cap for cap in required if isinstance(cap, str) and _risky_capability(cap)]
+        if mode == "safe" and risky_required:
+            return False, f"quest is marked safe but requires risky capabilities: {risky_required}"
         if not risky_required:
             return True, "safe"
 
@@ -306,10 +585,17 @@ class RunnerService:
             return False, f"missing capability grants: {missing}"
         return True, "authorized"
 
-    def complete_quest(self, quest_id: str, tier: str, artifact: str, actor_mode: str = "agent") -> dict[str, Any]:
-        if tier not in {"P0", "P1", "P2", "P3"}:
+    def complete_quest(
+        self,
+        quest_id: str,
+        tier: str,
+        artifact: str,
+        actor_mode: str = "agent",
+        artifacts: list[str] | None = None,
+    ) -> dict[str, Any]:
+        if tier not in TIER_RANK:
             raise ValueError("tier must be one of P0|P1|P2|P3")
-        if payload_contains_secrets({"artifact": artifact}):
+        if payload_contains_secrets({"artifact": artifact, "artifacts": artifacts or []}):
             raise ValueError("Artifact payload appears to contain secret-like data.")
 
         quest = self.get_quest(quest_id)
@@ -318,6 +604,40 @@ class RunnerService:
             raise PermissionError(f"Quest blocked in Safe Mode: {mode_used}")
 
         q = quest["quest"]
+        expected_tier = q.get("proof", {}).get("tier")
+        if expected_tier in TIER_RANK and TIER_RANK[tier] < TIER_RANK[expected_tier]:
+            raise ValueError(f"tier {tier} does not meet quest minimum proof tier {expected_tier}.")
+
+        declared_artifacts = q.get("proof", {}).get("artifacts", [])
+        required_artifacts = [
+            artifact_decl for artifact_decl in declared_artifacts if isinstance(artifact_decl, dict) and artifact_decl.get("required", True)
+        ]
+        if tier in {"P2", "P3"}:
+            for artifact_decl in required_artifacts:
+                if not artifact_decl.get("redaction_policy"):
+                    raise ValueError("Quest proof artifacts for P2/P3 must include redaction_policy.")
+
+        artifact_inputs = artifacts or []
+        if artifact and artifact.strip():
+            artifact_inputs = [artifact.strip(), *artifact_inputs]
+        normalized_artifacts = []
+        seen_artifacts = set()
+        for item in artifact_inputs:
+            if not isinstance(item, str):
+                continue
+            normalized = item.strip()
+            if not normalized or normalized in seen_artifacts:
+                continue
+            normalized_artifacts.append(normalized)
+            seen_artifacts.add(normalized)
+
+        if required_artifacts and not normalized_artifacts:
+            raise ValueError("This quest requires at least one artifact reference.")
+        if tier != "P0" and not normalized_artifacts:
+            raise ValueError("tier P1+ requires at least one artifact reference.")
+
+        artifact_refs = [self._artifact_ref(item) for item in normalized_artifacts]
+
         scoring = q.get("scoring", {})
         base_xp = int(scoring.get("base_xp", 0))
         multiplier = float(scoring.get("proof_multiplier", {}).get(tier, 1.0))
@@ -327,18 +647,19 @@ class RunnerService:
 
         now = datetime.now(tz=UTC)
         now_iso = now.isoformat()
-        completions = _load_json(self.completion_path, [])
-        score_state = _load_json(self.score_path, {})
+        completion_state = self._load_completions_state()
+        completions = completion_state.get("items", [])
+        score_state = self._load_score_state()
 
         last_quest_time_raw = score_state.get("quest_last_completion", {}).get(quest_id)
         if last_quest_time_raw:
-            last_quest_time = datetime.fromisoformat(last_quest_time_raw)
-            if now - last_quest_time < timedelta(hours=24):
+            last_quest_time = self._parse_iso_dt(last_quest_time_raw)
+            if last_quest_time and now - last_quest_time < timedelta(hours=24):
                 awarded_xp = 0
         cooldown_hours = q.get("cooldown", {}).get("min_hours")
         if isinstance(cooldown_hours, int) and last_quest_time_raw:
-            last_quest_time = datetime.fromisoformat(last_quest_time_raw)
-            if now - last_quest_time < timedelta(hours=cooldown_hours):
+            last_quest_time = self._parse_iso_dt(last_quest_time_raw)
+            if last_quest_time and now - last_quest_time < timedelta(hours=cooldown_hours):
                 awarded_xp = 0
 
         review_required = False
@@ -374,10 +695,12 @@ class RunnerService:
             "mode": actor_mode,
             "risk": q.get("risk_level"),
             "proof_tier": tier,
-            "proof_summary": f"Artifact reference recorded for {quest_id}",
-            "proof_hash": hashlib.sha256(f"{quest_id}|{now_iso}|{artifact}".encode("utf-8")).hexdigest(),
+            "proof_summary": f"Artifact metadata recorded for {quest_id}",
+            "proof_hash": hashlib.sha256(
+                f"{quest_id}|{now_iso}|{json.dumps(artifact_refs, sort_keys=True)}".encode("utf-8")
+            ).hexdigest(),
             "attested_by": None,
-            "artifact": self._artifact_ref(artifact),
+            "artifacts": artifact_refs,
             "mode_used": mode_used,
             "review_required": review_required,
         }
@@ -392,12 +715,14 @@ class RunnerService:
             "review_required": review_required,
         }
         completions.append(completion)
-        _save_json(self.completion_path, completions)
+        completion_state["items"] = completions
+        _save_json(self.completion_path, completion_state)
         _save_json(self.score_path, score_state)
         return completion
 
     def list_proofs(self, quest_id: str | None = None, date_range: str | None = None) -> list[dict[str, Any]]:
-        completions = _load_json(self.completion_path, [])
+        completion_state = self._load_completions_state()
+        completions = completion_state.get("items", [])
         filtered = completions
         if quest_id:
             filtered = [item for item in filtered if item.get("quest_id") == quest_id]
@@ -406,14 +731,20 @@ class RunnerService:
             if len(parts) == 2:
                 start = _parse_date(parts[0])
                 end = _parse_date(parts[1])
-                filtered = [
-                    item for item in filtered if start <= datetime.fromisoformat(item["timestamp"]).date() <= end
-                ]
+                narrowed: list[dict[str, Any]] = []
+                for item in filtered:
+                    timestamp = self._parse_iso_dt(item.get("timestamp"))
+                    if timestamp is None:
+                        continue
+                    if start <= timestamp.date() <= end:
+                        narrowed.append(item)
+                filtered = narrowed
         return filtered
 
     def get_scorecard(self) -> dict[str, Any]:
-        score = _load_json(self.score_path, {})
-        completions = _load_json(self.completion_path, [])
+        score = self._load_score_state()
+        completion_state = self._load_completions_state()
+        completions = completion_state.get("items", [])
         recent = sorted(completions, key=lambda item: item.get("timestamp", ""), reverse=True)[:10]
         return {
             "generated_at": _now_iso(),
