@@ -248,6 +248,12 @@ def _scan_hidden_unicode(
                 )
 
 
+def _sha256_text_normalized(path: Path) -> str:
+    text = path.read_text(encoding="utf-8")
+    normalized = text.replace("\r\n", "\n").replace("\r", "\n")
+    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+
+
 def lint_path(target_path: str | Path, docs_dir: str | Path | None = None) -> list[Finding]:
     target = Path(target_path).resolve()
     if not target.exists():
@@ -719,7 +725,7 @@ def lint_path(target_path: str | Path, docs_dir: str | Path | None = None) -> li
                     suggested_fix="Update checksums.files to existing files.",
                 )
                 continue
-            actual = hashlib.sha256(file_path.read_bytes()).hexdigest()
+            actual = _sha256_text_normalized(file_path)
             if actual != str(expected):
                 _add(
                     findings,

@@ -15,6 +15,12 @@ def _write(path: Path, text: str) -> None:
     path.write_text(text.strip() + "\n", encoding="utf-8")
 
 
+def _normalized_sha256(path: Path) -> str:
+    text = path.read_text(encoding="utf-8")
+    normalized = text.replace("\r\n", "\n").replace("\r", "\n")
+    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+
+
 def _mk_pack(
     tmp_path: Path,
     quests: dict[str, str],
@@ -34,7 +40,7 @@ def _mk_pack(
         data = yaml.safe_load(file_path.read_text(encoding="utf-8"))
         quest_ids.append(data["quest"]["id"])
         rel = f"quests/{file_name}"
-        digest = hashlib.sha256(file_path.read_bytes()).hexdigest()
+        digest = _normalized_sha256(file_path)
         checksums[rel] = ("0" * 64) if mismatch_checksum else digest
 
     pack_doc = {
