@@ -1,7 +1,7 @@
 # REPO_STRUCTURE.md
 Version: v0.1  
 Status: Draft  
-Last updated: 2026-02-08  
+Last updated: 2026-02-10  
 Owner: Project Team  
 
 ## Purpose
@@ -30,6 +30,7 @@ Define a repo layout that:
     REPO_STRUCTURE.md
     SECURITY.md
     CONTRIBUTING.md
+    TELEMETRY.md
 
   /quests/
     /packs/

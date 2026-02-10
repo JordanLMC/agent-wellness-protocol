@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
 
@@ -18,6 +19,13 @@ def _service_and_client(tmp_path: Path) -> tuple[RunnerService, TestClient]:
     service = RunnerService.create(_repo_root())
     app = create_app(service)
     return service, TestClient(app)
+
+
+def _events(tmp_path: Path) -> list[dict]:
+    events_path = tmp_path / "home" / "telemetry" / "events.jsonl"
+    if not events_path.exists():
+        return []
+    return [json.loads(line) for line in events_path.read_text(encoding="utf-8").splitlines() if line.strip()]
 
 
 def test_daily_plan_endpoint(tmp_path: Path) -> None:
@@ -105,3 +113,19 @@ def test_proof_submission_rejects_secret_like_artifacts(tmp_path: Path) -> None:
         },
     )
     assert response.status_code == 400
+
+
+def test_mcp_header_sets_event_source(tmp_path: Path) -> None:
+    _, client = _service_and_client(tmp_path)
+    response = client.post(
+        "/v1/plans/daily/generate",
+        params={"date": "2026-02-10"},
+        headers={"X-Clawspa-Source": "mcp", "X-Clawspa-Actor": "agent"},
+    )
+    assert response.status_code == 200
+
+    events = _events(tmp_path)
+    plan_events = [event for event in events if event.get("event_type") == "plan.generated"]
+    assert plan_events
+    assert plan_events[-1]["source"] == "mcp"
+    assert plan_events[-1]["actor"] == "agent"

@@ -82,6 +82,12 @@ This is a **conceptual API** for v0.1. We can implement it as:
 - `GET /v1/scorecard/export`
   - returns a shareable redacted export (local by default)
 
+### Telemetry (v0.1)
+- v0.1 telemetry is local CLI-driven:
+  - append-only local event log
+  - aggregated export via runner CLI
+- No raw telemetry event API endpoint is exposed by default.
+
 ### Capability grants (Authorized Mode control)
 - `GET /v1/capabilities`
 - `POST /v1/capabilities/grant`

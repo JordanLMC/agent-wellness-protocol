@@ -72,3 +72,30 @@ def test_validate_tool_arguments_rejects_large_profile_patch() -> None:
 def test_validate_tool_arguments_rejects_secret_profile_patch() -> None:
     with pytest.raises(ValueError, match="secret-like"):
         validate_tool_arguments("update_agent_profile", {"profile_patch": {"token": "sk-abcdefghijklmnop"}})
+
+
+def test_mcp_request_sets_source_headers(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: dict[str, str] = {}
+
+    class _DummyResponse:
+        def __enter__(self) -> "_DummyResponse":
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> bool:
+            return False
+
+        def read(self) -> bytes:
+            return b"{}"
+
+    def _fake_urlopen(request, timeout=10):  # noqa: ANN001
+        headers = {key.lower(): value for key, value in request.header_items()}
+        captured["source"] = headers.get("x-clawspa-source")
+        captured["actor"] = headers.get("x-clawspa-actor")
+        return _DummyResponse()
+
+    monkeypatch.setattr("clawspa_mcp.server.urlopen", _fake_urlopen)
+    bridge = MCPBridge("http://127.0.0.1:8000")
+    bridge._request("GET", "/v1/health")
+
+    assert captured["source"] == "mcp"
+    assert captured["actor"] == "agent"

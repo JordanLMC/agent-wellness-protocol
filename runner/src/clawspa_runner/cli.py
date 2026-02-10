@@ -76,16 +76,26 @@ def main() -> int:
     cap_revoke.add_argument("--grant-id")
     cap_revoke.add_argument("--capability")
 
+    telemetry_cmd = sub.add_parser("telemetry", help="Telemetry operations")
+    telemetry_sub = telemetry_cmd.add_subparsers(dest="telemetry_command", required=True)
+    telemetry_status = telemetry_sub.add_parser("status", help="Show telemetry status")
+    telemetry_status.set_defaults(_telemetry_action="status")
+    telemetry_purge = telemetry_sub.add_parser("purge", help="Delete local telemetry events")
+    telemetry_purge.set_defaults(_telemetry_action="purge")
+    telemetry_export = telemetry_sub.add_parser("export", help="Export aggregated telemetry summary")
+    telemetry_export.add_argument("--range", default="7d", help="Range window like 7d or 24h")
+    telemetry_export.add_argument("--out", required=True, help="Output JSON path")
+
     args = parser.parse_args()
     service = _service()
 
     if args.command == "plan":
-        plan = service.get_daily_plan(date.fromisoformat(args.date))
+        plan = service.get_daily_plan(date.fromisoformat(args.date), source="cli", actor="human")
         _print_plan(plan)
         return 0
 
     if args.command == "complete":
-        result = service.complete_quest(args.quest, args.tier, args.artifact)
+        result = service.complete_quest(args.quest, args.tier, args.artifact, source="cli")
         print(json.dumps(result, indent=2))
         return 0
 
@@ -124,12 +134,31 @@ def main() -> int:
                 ttl_seconds=args.ttl_seconds,
                 scope=args.scope,
                 ticket_token=args.ticket,
+                source="cli",
+                actor="human",
             )
             print(json.dumps(result, indent=2))
             return 0
         if args.cap_command == "revoke":
-            result = service.revoke_capability(grant_id=args.grant_id, capability=args.capability)
+            result = service.revoke_capability(
+                grant_id=args.grant_id,
+                capability=args.capability,
+                source="cli",
+                actor="human",
+            )
             print(json.dumps(result, indent=2))
+            return 0
+
+    if args.command == "telemetry":
+        if args.telemetry_command == "status":
+            print(json.dumps(service.telemetry_status(), indent=2))
+            return 0
+        if args.telemetry_command == "purge":
+            print(json.dumps(service.telemetry_purge(), indent=2))
+            return 0
+        if args.telemetry_command == "export":
+            summary = service.telemetry_export(args.range, Path(args.out))
+            print(json.dumps(summary, indent=2))
             return 0
 
     return 1

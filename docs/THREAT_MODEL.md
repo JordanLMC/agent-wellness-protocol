@@ -52,6 +52,7 @@ The Wellness System will likely include these surfaces (not all required at MVP)
 - **MCP server code** and tool schemas.
 - **Proof/attestation artifacts** (including redacted logs, hashes, metadata).
 - **Scoring state** (streaks, XP) and any exported “Trust Signals.”
+- **Local telemetry events and metric exports**.
 
 ---
 
@@ -164,6 +165,15 @@ The Wellness System will likely include these surfaces (not all required at MVP)
 - Treat quest content and workflow files as supply chain artifacts.
 - Enforce CI scanning for bidi/invisible Unicode controls.
 - Enforce quest-lint hard errors on hidden controls in `pack.yaml` and `*.quest.yaml`.
+
+### 9) Telemetry data leakage
+**Attack:** Telemetry accidentally records secrets, raw logs, or sensitive artifact content.  
+**Impact:** Local data exposure and unsafe sharing of exported metrics.  
+**Mitigations:**
+- Keep telemetry local-first and append-only.
+- Enforce recursive sanitization and truncation for telemetry payloads.
+- Emit risk flags when telemetry sanitization occurs.
+- Export aggregated metrics only (no raw event dumps by default).
 
 ---
 

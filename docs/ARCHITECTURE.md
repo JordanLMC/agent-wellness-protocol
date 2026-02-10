@@ -1,7 +1,7 @@
 # ARCHITECTURE.md
 Version: v0.1  
 Status: Draft  
-Last updated: 2026-02-08  
+Last updated: 2026-02-10  
 Owner: Project Team  
 
 ## Purpose
@@ -59,6 +59,7 @@ We treat this as **one product with three surfaces**:
   - XP
   - quest completion history
   - local proofs (redacted and/or hashed)
+  - local telemetry events (sanitized, append-only JSONL)
 
 ### C) MCP / Tool Server (optional, but likely)
 - Exposes tools like:
