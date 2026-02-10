@@ -28,6 +28,20 @@ This is a **conceptual API** for v0.1. We can implement it as:
 - **Explicit capability gating** for anything risky.
 - **No secrets in API calls** (the API should not become a secret exfiltration channel).
 
+### Request context headers (v0.1)
+
+Supported optional headers for attribution and audit context:
+- `X-Clawspa-Source`: `cli | api | mcp` (defaults to `api`)
+- `X-Clawspa-Actor`: `human | agent | system` (endpoint-specific default if omitted)
+- `X-Clawspa-Actor-Id`: actor identifier string (for example `openclaw:moltfred`, `human:jordan`)
+
+Actor id resolution precedence:
+1. `X-Clawspa-Actor-Id` header
+2. request body `actor_id` (for endpoints that accept bodies)
+3. fallback `"unknown"`
+
+Actor ids are sanitized before telemetry persistence (control chars stripped, secret-like content redacted, long values truncated).
+
 ---
 
 ## Core resources
@@ -75,6 +89,7 @@ This is a **conceptual API** for v0.1. We can implement it as:
 ### Proofs / Completion
 - `POST /v1/proofs`
   - body includes: quest_id, proof tier, artifact refs
+  - optional body `actor_id` (lower precedence than `X-Clawspa-Actor-Id`)
 - `GET /v1/proofs?quest_id=&date_range=`
 
 ### Scorecard
@@ -93,8 +108,10 @@ This is a **conceptual API** for v0.1. We can implement it as:
 - `POST /v1/capabilities/grant`
   - requires explicit user confirmation via a short-lived local grant ticket
   - includes scope, TTL, and `ticket_token` (single use)
+  - optional body `actor_id` (lower precedence than `X-Clawspa-Actor-Id`)
   - ticket issuance is local-human mediated (CLI/runner UX), not agent-issued
 - `POST /v1/capabilities/revoke`
+  - optional body `actor_id` (lower precedence than `X-Clawspa-Actor-Id`)
 
 ---
 

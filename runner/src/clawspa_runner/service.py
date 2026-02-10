@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import time
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
@@ -11,7 +12,7 @@ from typing import Any
 from .paths import agent_home, ensure_home_dirs
 from .quests import QuestRepository
 from .security import payload_contains_pii, payload_contains_secrets, payload_requests_raw_logs
-from .telemetry import TelemetryLogger
+from .telemetry import TelemetryLogger, sanitize_actor_id
 
 
 STATE_SCHEMA_VERSION = "0.1"
@@ -37,8 +38,17 @@ def _load_json(path: Path, default: Any) -> Any:
 def _save_json(path: Path, value: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temp_path = path.parent / f".{path.name}.tmp"
-    temp_path.write_text(json.dumps(value, indent=2), encoding="utf-8")
-    temp_path.replace(path)
+    payload = json.dumps(value, indent=2)
+    for attempt in range(5):
+        temp_path.write_text(payload, encoding="utf-8")
+        try:
+            temp_path.replace(path)
+            return
+        except PermissionError:
+            if attempt == 4:
+                raise
+            # On Windows, AV/indexers can briefly lock newly-written temp files.
+            time.sleep(0.02 * (attempt + 1))
 
 
 def _risky_capability(capability: str) -> bool:
@@ -118,6 +128,7 @@ class RunnerService:
         service.telemetry.log_event(
             "runner.started",
             actor="system",
+            actor_id="system:runner",
             source="cli",
             data={"home_path_hash": hashlib.sha256(str(home).encode("utf-8")).hexdigest()},
         )
@@ -208,10 +219,22 @@ class RunnerService:
             return source
         return "cli"
 
-    def _emit_event(self, event_type: str, *, actor: str, source: str, data: dict[str, Any]) -> None:
+    def _normalize_actor_id(self, actor_id: str | None) -> str:
+        return sanitize_actor_id(actor_id)
+
+    def _emit_event(
+        self,
+        event_type: str,
+        *,
+        actor: str,
+        actor_id: str | None,
+        source: str,
+        data: dict[str, Any],
+    ) -> None:
         self.telemetry.log_event(
             event_type,
             actor=self._normalize_actor(actor),
+            actor_id=self._normalize_actor_id(actor_id),
             source=self._normalize_source(source),
             data=data,
         )
@@ -384,6 +407,7 @@ class RunnerService:
         *,
         source: str = "cli",
         actor: str = "human",
+        actor_id: str = "unknown",
     ) -> dict[str, Any]:
         if ttl_seconds <= 0:
             raise ValueError("ttl_seconds must be positive.")
@@ -436,6 +460,7 @@ class RunnerService:
         self._emit_event(
             "capability.granted",
             actor=actor,
+            actor_id=actor_id,
             source=source,
             data={
                 "grant_id": grant["grant_id"],
@@ -454,6 +479,7 @@ class RunnerService:
         *,
         source: str = "cli",
         actor: str = "human",
+        actor_id: str = "unknown",
     ) -> dict[str, Any]:
         if not grant_id and not capability:
             raise ValueError("Provide grant_id or capability.")
@@ -498,6 +524,7 @@ class RunnerService:
             self._emit_event(
                 "capability.revoked",
                 actor=actor,
+                actor_id=actor_id,
                 source=source,
                 data={
                     "revoked_count": changed,
@@ -587,7 +614,14 @@ class RunnerService:
                 return quest
         return None
 
-    def generate_daily_plan(self, target_date: date, *, source: str = "cli", actor: str = "human") -> dict[str, Any]:
+    def generate_daily_plan(
+        self,
+        target_date: date,
+        *,
+        source: str = "cli",
+        actor: str = "human",
+        actor_id: str = "unknown",
+    ) -> dict[str, Any]:
         all_daily = [q for q in self.list_quests().values() if q.get("quest", {}).get("cadence") == "daily"]
         if not all_daily:
             raise ValueError("No daily quests found.")
@@ -628,6 +662,7 @@ class RunnerService:
         self._emit_event(
             "plan.generated",
             actor=actor,
+            actor_id=actor_id,
             source=source,
             data={
                 "date": key,
@@ -645,11 +680,18 @@ class RunnerService:
         )
         return plan
 
-    def get_daily_plan(self, target_date: date, *, source: str = "cli", actor: str = "human") -> dict[str, Any]:
+    def get_daily_plan(
+        self,
+        target_date: date,
+        *,
+        source: str = "cli",
+        actor: str = "human",
+        actor_id: str = "unknown",
+    ) -> dict[str, Any]:
         plan_file = self.dirs["plans"] / f"daily-{target_date.isoformat()}.json"
         if plan_file.exists():
             return _load_json(plan_file, {})
-        return self.generate_daily_plan(target_date, source=source, actor=actor)
+        return self.generate_daily_plan(target_date, source=source, actor=actor, actor_id=actor_id)
 
     def _validate_artifact_text(self, text: str, *, source: str) -> None:
         if payload_contains_secrets(text):
@@ -717,6 +759,7 @@ class RunnerService:
         actor_mode: str = "agent",
         artifacts: list[str] | None = None,
         source: str = "cli",
+        actor_id: str = "unknown",
     ) -> dict[str, Any]:
         actor = self._normalize_actor(actor_mode)
         source = self._normalize_source(source)
@@ -725,6 +768,7 @@ class RunnerService:
             self._emit_event(
                 "quest.failed",
                 actor=actor,
+                actor_id=actor_id,
                 source=source,
                 data={
                     "quest_id": quest_id,
@@ -741,6 +785,7 @@ class RunnerService:
             self._emit_event(
                 "risk.flagged",
                 actor="system",
+                actor_id=actor_id,
                 source=source,
                 data={"reason": "artifact_secret_like", "quest_id": quest_id},
             )
@@ -822,6 +867,7 @@ class RunnerService:
                 self._emit_event(
                     "risk.flagged",
                     actor="system",
+                    actor_id=actor_id,
                     source=source,
                     data={"reason": "artifact_blocked", "quest_id": quest_id},
                 )
@@ -838,6 +884,7 @@ class RunnerService:
         self._emit_event(
             "proof.submitted",
             actor=actor,
+            actor_id=actor_id,
             source=source,
             data={
                 "quest_id": quest_id,
@@ -931,6 +978,7 @@ class RunnerService:
         self._emit_event(
             "quest.completed",
             actor=actor,
+            actor_id=actor_id,
             source=source,
             data={
                 "quest_id": quest_id,
@@ -945,6 +993,7 @@ class RunnerService:
         self._emit_event(
             "scorecard.updated",
             actor=actor,
+            actor_id=actor_id,
             source=source,
             data={
                 "quest_id": quest_id,
@@ -1011,11 +1060,12 @@ class RunnerService:
         removed = self.telemetry.purge()
         return {"path": str(self.telemetry.events_path), "purged": removed}
 
-    def telemetry_export(self, range_value: str, out_path: Path) -> dict[str, Any]:
+    def telemetry_export(self, range_value: str, out_path: Path, actor_id: str | None = None) -> dict[str, Any]:
         return self.telemetry.export_summary(
             range_value=range_value,
             score_state=self._load_score_state(),
             out_path=out_path,
+            actor_id=actor_id,
         )
 
     def profile_paths(self) -> dict[str, Path]:
@@ -1047,11 +1097,13 @@ class RunnerService:
         *,
         source: str = "cli",
         actor: str | None = None,
+        actor_id: str | None = None,
     ) -> dict[str, Any]:
         if payload_contains_secrets(profile):
             self._emit_event(
                 "risk.flagged",
                 actor="system",
+                actor_id=actor_id,
                 source=source,
                 data={"reason": "profile_secret_like_payload", "profile_kind": profile_kind},
             )
@@ -1063,6 +1115,7 @@ class RunnerService:
         self._emit_event(
             "profile.updated",
             actor=resolved_actor,
+            actor_id=actor_id,
             source=source,
             data={"profile_kind": profile_kind},
         )

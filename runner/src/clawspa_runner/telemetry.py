@@ -5,6 +5,7 @@ import platform
 import re
 import subprocess
 import sys
+import unicodedata
 import uuid
 from collections import Counter
 from dataclasses import dataclass
@@ -29,7 +30,7 @@ VALID_EVENT_TYPES = {
     "capability.revoked",
     "risk.flagged",
 }
-VALID_ACTORS = {"human", "agent", "system"}
+VALID_ACTOR_KINDS = {"human", "agent", "system"}
 VALID_SOURCES = {"cli", "api", "mcp"}
 MAX_STRING_LENGTH = 200
 RANGE_PATTERN = re.compile(r"^(\d+)([dh])$")
@@ -58,6 +59,10 @@ def _parse_ts(value: str) -> datetime | None:
 
 def _safe_json(value: Any) -> str:
     return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+
+
+def _strip_control_chars(value: str) -> str:
+    return "".join(ch for ch in value if not unicodedata.category(ch).startswith("C"))
 
 
 @dataclass(frozen=True)
@@ -89,23 +94,84 @@ def _combine_stats(a: SanitizeStats, b: SanitizeStats) -> SanitizeStats:
     )
 
 
+def _sanitize_text(value: str, *, empty_fallback: str | None = None) -> tuple[str, SanitizeStats]:
+    cleaned = _strip_control_chars(value).strip()
+    if not cleaned and empty_fallback is not None:
+        cleaned = empty_fallback
+    if payload_contains_secrets(cleaned) or payload_contains_pii(cleaned):
+        return "[redacted]", SanitizeStats(redacted_fields=1)
+    if len(cleaned) > MAX_STRING_LENGTH:
+        return f"{cleaned[:MAX_STRING_LENGTH]}...[truncated]", SanitizeStats(truncated_fields=1)
+    return cleaned, SanitizeStats()
+
+
+def sanitize_actor_id(value: Any) -> str:
+    text = "unknown" if value is None else str(value)
+    sanitized, _ = _sanitize_text(text, empty_fallback="unknown")
+    if not sanitized:
+        return "unknown"
+    return sanitized
+
+
+def normalize_actor_model(
+    actor: Any,
+    *,
+    actor_id: Any | None = None,
+    default_kind: str = "system",
+) -> dict[str, str]:
+    raw_kind: Any = default_kind
+    raw_id: Any | None = actor_id
+
+    if isinstance(actor, dict):
+        raw_kind = actor.get("kind", default_kind)
+        if raw_id is None:
+            raw_id = actor.get("id")
+    elif isinstance(actor, str):
+        lowered = actor.strip().lower()
+        if lowered in VALID_ACTOR_KINDS:
+            raw_kind = lowered
+        else:
+            if raw_id is None and actor.strip():
+                raw_id = actor
+            if ":" in lowered:
+                prefix = lowered.split(":", 1)[0]
+                if prefix in VALID_ACTOR_KINDS:
+                    raw_kind = prefix
+    else:
+        raw_kind = default_kind
+
+    kind = str(raw_kind).strip().lower()
+    if kind not in VALID_ACTOR_KINDS:
+        kind = default_kind if default_kind in VALID_ACTOR_KINDS else "system"
+    return {"kind": kind, "id": sanitize_actor_id(raw_id)}
+
+
+def normalize_event_actor(event: dict[str, Any]) -> dict[str, str]:
+    actor_value = event.get("actor")
+    if isinstance(actor_value, dict):
+        return normalize_actor_model(actor_value, default_kind="system")
+    if isinstance(actor_value, str):
+        return normalize_actor_model(actor_value, default_kind="system")
+    return {"kind": "system", "id": "unknown"}
+
+
+def normalize_event_source(event: dict[str, Any]) -> str:
+    source = event.get("source")
+    if isinstance(source, str):
+        candidate = source.strip().lower()
+        if candidate in VALID_SOURCES:
+            return candidate
+    return "cli"
+
+
 def _sanitize_scalar(value: Any) -> tuple[Any, SanitizeStats]:
     if value is None or isinstance(value, (int, float, bool)):
         return value, SanitizeStats()
     if isinstance(value, str):
-        if payload_contains_secrets(value) or payload_contains_pii(value):
-            return "[redacted]", SanitizeStats(redacted_fields=1)
-        if len(value) > MAX_STRING_LENGTH:
-            return f"{value[:MAX_STRING_LENGTH]}...[truncated]", SanitizeStats(truncated_fields=1)
-        return value, SanitizeStats()
+        return _sanitize_text(value, empty_fallback="")
 
-    # Non-JSON scalar-like values are coerced to safe strings.
     as_text = str(value)
-    if payload_contains_secrets(as_text) or payload_contains_pii(as_text):
-        return "[redacted]", SanitizeStats(redacted_fields=1)
-    if len(as_text) > MAX_STRING_LENGTH:
-        return f"{as_text[:MAX_STRING_LENGTH]}...[truncated]", SanitizeStats(truncated_fields=1)
-    return as_text, SanitizeStats()
+    return _sanitize_text(as_text, empty_fallback="")
 
 
 def sanitize_event_data(data: Any) -> tuple[Any, SanitizeStats]:
@@ -179,11 +245,6 @@ class TelemetryLogger:
             platform=platform.platform(),
         )
 
-    def _normalize_actor(self, actor: str) -> str:
-        if actor in VALID_ACTORS:
-            return actor
-        return "system"
-
     def _normalize_source(self, source: str) -> str:
         if source in VALID_SOURCES:
             return source
@@ -195,19 +256,29 @@ class TelemetryLogger:
             handle.write(_safe_json(payload))
             handle.write("\n")
 
-    def _base_event(self, *, event_type: str, actor: str, source: str, data: dict[str, Any]) -> dict[str, Any]:
-        if event_type not in VALID_EVENT_TYPES:
+    def _base_event(
+        self,
+        *,
+        event_type: str,
+        actor: str,
+        actor_id: str | None,
+        source: str,
+        data: dict[str, Any],
+    ) -> dict[str, Any]:
+        requested_event_type = event_type
+        if requested_event_type not in VALID_EVENT_TYPES:
             event_type = "risk.flagged"
             data = {
                 "reason": "invalid_event_type",
-                "invalid_event_type_hash": hashlib_sha256_hex(event_type),
+                "invalid_event_type_hash": hashlib_sha256_hex(requested_event_type),
             }
+        actor_model = normalize_actor_model(actor, actor_id=actor_id, default_kind="system")
         return {
             "schema_version": SCHEMA_VERSION,
             "event_id": str(uuid.uuid4()),
             "ts": _utc_now_rfc3339(),
             "event_type": event_type,
-            "actor": self._normalize_actor(actor),
+            "actor": actor_model,
             "source": self._normalize_source(source),
             "build": self.build.to_dict(),
             "data": data,
@@ -220,6 +291,7 @@ class TelemetryLogger:
         actor: str,
         source: str,
         data: dict[str, Any],
+        actor_id: str | None = None,
         _emit_sanitize_flag: bool = True,
     ) -> None:
         try:
@@ -227,6 +299,7 @@ class TelemetryLogger:
             event_payload = self._base_event(
                 event_type=event_type,
                 actor=actor,
+                actor_id=actor_id,
                 source=source,
                 data=sanitized_data if isinstance(sanitized_data, dict) else {"value": sanitized_data},
             )
@@ -235,6 +308,7 @@ class TelemetryLogger:
                 self.log_event(
                     "risk.flagged",
                     actor="system",
+                    actor_id=actor_id,
                     source=source,
                     data={
                         "reason": "telemetry_sanitized",
@@ -286,26 +360,40 @@ class TelemetryLogger:
         range_value: str,
         score_state: dict[str, Any],
         out_path: Path | None = None,
+        actor_id: str | None = None,
     ) -> dict[str, Any]:
         window = parse_range(range_value)
         end = _utc_now()
         start = end - window
+        actor_filter = sanitize_actor_id(actor_id) if actor_id is not None else None
 
         events = self.iter_events()
         in_window: list[dict[str, Any]] = []
+        normalized_actors: dict[int, dict[str, str]] = {}
+        normalized_sources: dict[int, str] = {}
         for event in events:
             parsed_ts = _parse_ts(event.get("ts"))
             if parsed_ts is None:
                 continue
-            if start <= parsed_ts <= end:
-                in_window.append(event)
+            if not (start <= parsed_ts <= end):
+                continue
+            actor_model = normalize_event_actor(event)
+            if actor_filter is not None and actor_model["id"] != actor_filter:
+                continue
+            in_window.append(event)
+            normalized_actors[id(event)] = actor_model
+            normalized_sources[id(event)] = normalize_event_source(event)
 
         completions = [evt for evt in in_window if evt.get("event_type") == "quest.completed"]
         failures = [evt for evt in in_window if evt.get("event_type") == "quest.failed"]
         plans = [evt for evt in in_window if evt.get("event_type") == "plan.generated"]
         flags = [evt for evt in in_window if evt.get("event_type") == "risk.flagged"]
 
-        completions_by_actor = Counter(evt.get("actor", "system") for evt in completions)
+        events_by_actor_kind = Counter(normalized_actors[id(evt)]["kind"] for evt in in_window)
+        events_by_actor_id = Counter(normalized_actors[id(evt)]["id"] for evt in in_window)
+        completions_by_actor_kind = Counter(normalized_actors[id(evt)]["kind"] for evt in completions)
+        completions_by_actor_id = Counter(normalized_actors[id(evt)]["id"] for evt in completions)
+        completions_by_source = Counter(normalized_sources[id(evt)] for evt in completions)
         completions_by_proof_tier = Counter(
             str(evt.get("data", {}).get("proof_tier", "unknown")) for evt in completions
         )
@@ -327,11 +415,17 @@ class TelemetryLogger:
             "schema_version": SCHEMA_VERSION,
             "generated_at": _utc_now_rfc3339(),
             "range": range_value,
+            "actor_id_filter": actor_filter,
             "window_start": start.replace(microsecond=0).isoformat().replace("+00:00", "Z"),
             "window_end": end.replace(microsecond=0).isoformat().replace("+00:00", "Z"),
             "events_considered": len(in_window),
+            "events_by_actor_kind": dict(sorted(events_by_actor_kind.items())),
+            "events_by_actor_id": dict(sorted(events_by_actor_id.items())),
             "completions_total": len(completions),
-            "completions_by_actor": dict(sorted(completions_by_actor.items())),
+            "completions_by_actor": dict(sorted(completions_by_actor_kind.items())),
+            "completions_by_actor_kind": dict(sorted(completions_by_actor_kind.items())),
+            "completions_by_actor_id": dict(sorted(completions_by_actor_id.items())),
+            "completions_by_source": dict(sorted(completions_by_source.items())),
             "completions_by_proof_tier": dict(sorted(completions_by_proof_tier.items())),
             "daily_streak": int(score_state.get("daily_streak", 0)),
             "weekly_streak": int(score_state.get("weekly_streak", 0)),
