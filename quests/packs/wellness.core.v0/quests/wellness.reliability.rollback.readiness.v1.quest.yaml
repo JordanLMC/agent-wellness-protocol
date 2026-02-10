@@ -1,0 +1,48 @@
+schema_version: 0.1
+quest:
+  id: wellness.reliability.rollback.readiness.v1
+  title: Rollback Readiness
+  summary: Verify rollback checklist and restore readiness for last-known-good state.
+  pillars:
+  - Reliability & Robustness
+  - Continuous Governance & Oversight
+  cadence: weekly
+  difficulty: 3
+  risk_level: medium
+  mode: safe
+  required_capabilities:
+  - read:agent_config
+  - read:project_files
+  steps:
+    human:
+    - type: warn
+      text: Stop and ask human owner if backup gaps are detected.
+    - type: checklist
+      items:
+      - Confirm last-known-good recovery source exists.
+      - Record expected data loss window.
+      - Update five-step rollback checklist.
+    agent:
+    - type: output
+      artifact: rollback_readiness_note
+  proof:
+    tier: P2
+    artifacts:
+    - id: rollback_readiness_note
+      type: json
+      required: true
+      redaction_policy: no-secrets
+  scoring:
+    base_xp: 34
+    streak_weight: 2
+    proof_multiplier:
+      P0: 1.0
+      P1: 1.2
+      P2: 1.5
+      P3: 1.4
+  cooldown:
+    min_hours: 120
+  tags:
+  - short:REL-WEEKLY-001
+  - timebox:20
+  - reliability

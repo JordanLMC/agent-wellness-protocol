@@ -10,8 +10,8 @@ from .service import RunnerService
 
 
 class ProofArtifact(BaseModel):
-    ref: str
-    summary: str | None = None
+    ref: str = Field(min_length=1, max_length=512)
+    summary: str | None = Field(default=None, max_length=280)
 
 
 class ProofRequest(BaseModel):
@@ -25,7 +25,7 @@ class GrantRequest(BaseModel):
     capabilities: list[str] = Field(default_factory=list)
     ttl_seconds: int = 3600
     scope: str = "manual"
-    confirmed: bool = False
+    ticket_token: str = Field(min_length=1)
 
 
 class RevokeRequest(BaseModel):
@@ -55,15 +55,6 @@ def create_app(service: RunnerService) -> FastAPI:
             raise HTTPException(status_code=404, detail="Pack not found")
         return pack
 
-    @app.get("/v1/quests/{quest_id}")
-    def get_quest(quest_id: str) -> dict[str, Any]:
-        try:
-            return service.get_quest(quest_id)
-        except KeyError as exc:
-            raise HTTPException(status_code=404, detail=str(exc)) from exc
-        except ValueError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
-
     @app.get("/v1/quests/search")
     def search_quests(
         pillar: str | None = None,
@@ -73,6 +64,15 @@ def create_app(service: RunnerService) -> FastAPI:
     ) -> list[dict[str, Any]]:
         try:
             return service.search_quests(pillar=pillar, tag=tag, risk_level=risk_level, mode=mode)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.get("/v1/quests/{quest_id}")
+    def get_quest(quest_id: str) -> dict[str, Any]:
+        try:
+            return service.get_quest(quest_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -124,9 +124,16 @@ def create_app(service: RunnerService) -> FastAPI:
 
     @app.post("/v1/proofs")
     def submit_proof(request: ProofRequest) -> dict[str, Any]:
-        artifact_ref = request.artifacts[0].ref if request.artifacts else ""
+        artifact_refs = [item.ref for item in request.artifacts]
+        primary_artifact = artifact_refs[0] if artifact_refs else ""
         try:
-            return service.complete_quest(request.quest_id, request.tier, artifact_ref, actor_mode=request.mode)
+            return service.complete_quest(
+                request.quest_id,
+                request.tier,
+                primary_artifact,
+                actor_mode=request.mode,
+                artifacts=artifact_refs[1:],
+            )
         except (ValueError, PermissionError) as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         except KeyError as exc:
@@ -155,11 +162,11 @@ def create_app(service: RunnerService) -> FastAPI:
     @app.post("/v1/capabilities/grant")
     def grant_capabilities(request: GrantRequest) -> dict[str, Any]:
         try:
-            return service.grant_capabilities(
+            return service.grant_capabilities_with_ticket(
                 capabilities=request.capabilities,
                 ttl_seconds=request.ttl_seconds,
                 scope=request.scope,
-                confirmed=request.confirmed,
+                ticket_token=request.ticket_token,
             )
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc

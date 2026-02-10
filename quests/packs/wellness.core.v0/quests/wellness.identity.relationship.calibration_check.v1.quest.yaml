@@ -1,0 +1,48 @@
+schema_version: 0.1
+quest:
+  id: wellness.identity.relationship.calibration_check.v1
+  title: Relationship Check (Human + Agent)
+  summary: Capture one communication miss and one good autonomy decision to improve
+    collaboration.
+  pillars:
+  - User Experience & Trust Calibration
+  - Continuous Governance & Oversight
+  cadence: daily
+  difficulty: 1
+  risk_level: low
+  mode: safe
+  required_capabilities:
+  - read:project_files
+  steps:
+    human:
+    - type: checklist
+      items:
+      - Record one moment where earlier clarification would have helped.
+      - Record one moment where autonomous action was appropriate.
+      - Record one improvement rule for tomorrow.
+    agent:
+    - type: reflect
+      text: Summarize trust calibration improvement for next session.
+    - type: output
+      artifact: relationship_check
+  proof:
+    tier: P1
+    artifacts:
+    - id: relationship_check
+      type: markdown
+      required: true
+      redaction_policy: no-secrets
+  scoring:
+    base_xp: 12
+    streak_weight: 1
+    proof_multiplier:
+      P0: 1.0
+      P1: 1.2
+      P2: 1.5
+      P3: 1.4
+  cooldown:
+    min_hours: 18
+  tags:
+  - short:ID-DAILY-003
+  - timebox:4
+  - relationship

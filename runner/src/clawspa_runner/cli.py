@@ -62,11 +62,16 @@ def main() -> int:
 
     cap_cmd = sub.add_parser("capability", help="Capability grants")
     cap_sub = cap_cmd.add_subparsers(dest="cap_command", required=True)
+    cap_ticket = cap_sub.add_parser("ticket", help="Create human confirmation ticket for capability grant")
+    cap_ticket.add_argument("--cap", action="append", required=True, help="Capability name (repeatable)")
+    cap_ticket.add_argument("--ttl-seconds", type=int, default=900)
+    cap_ticket.add_argument("--scope", default="manual")
+    cap_ticket.add_argument("--reason", default="human approved temporary elevation")
     cap_grant = cap_sub.add_parser("grant")
     cap_grant.add_argument("--cap", action="append", required=True, help="Capability name (repeatable)")
     cap_grant.add_argument("--ttl-seconds", type=int, default=3600)
     cap_grant.add_argument("--scope", default="manual")
-    cap_grant.add_argument("--confirm", action="store_true")
+    cap_grant.add_argument("--ticket", required=True, help="Single-use grant ticket token")
     cap_revoke = cap_sub.add_parser("revoke")
     cap_revoke.add_argument("--grant-id")
     cap_revoke.add_argument("--capability")
@@ -104,12 +109,21 @@ def main() -> int:
         return 0
 
     if args.command == "capability":
-        if args.cap_command == "grant":
-            result = service.grant_capabilities(
+        if args.cap_command == "ticket":
+            result = service.create_grant_ticket(
                 capabilities=args.cap,
                 ttl_seconds=args.ttl_seconds,
                 scope=args.scope,
-                confirmed=args.confirm,
+                reason=args.reason,
+            )
+            print(json.dumps(result, indent=2))
+            return 0
+        if args.cap_command == "grant":
+            result = service.grant_capabilities_with_ticket(
+                capabilities=args.cap,
+                ttl_seconds=args.ttl_seconds,
+                scope=args.scope,
+                ticket_token=args.ticket,
             )
             print(json.dumps(result, indent=2))
             return 0

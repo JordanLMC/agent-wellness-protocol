@@ -1,0 +1,49 @@
+schema_version: 0.1
+quest:
+  id: wellness.security.supply_chain.provenance_review.v1
+  title: Skill/Plugin Provenance Review
+  summary: Review plugin source, versioning, and reputation to reduce supply-chain
+    risk.
+  pillars:
+  - Security & Access Control
+  - Tool / Integration Hygiene
+  cadence: weekly
+  difficulty: 3
+  risk_level: medium
+  mode: safe
+  required_capabilities:
+  - read:installed_skills
+  - read:agent_config
+  steps:
+    human:
+    - type: warn
+      text: Stop and ask human owner before removing tooling tied to critical workflows.
+    - type: checklist
+      items:
+      - Record source, version, and update cadence for installed plugins.
+      - Flag unpinned or low-reputation dependencies.
+      - Recommend keep/pin/replace/remove for flagged entries.
+    agent:
+    - type: output
+      artifact: provenance_review
+  proof:
+    tier: P2
+    artifacts:
+    - id: provenance_review
+      type: json
+      required: true
+      redaction_policy: no-secrets
+  scoring:
+    base_xp: 34
+    streak_weight: 2
+    proof_multiplier:
+      P0: 1.0
+      P1: 1.2
+      P2: 1.5
+      P3: 1.4
+  cooldown:
+    min_hours: 120
+  tags:
+  - short:SEC-WEEKLY-001
+  - timebox:20
+  - supply-chain

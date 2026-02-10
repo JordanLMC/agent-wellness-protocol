@@ -19,5 +19,7 @@ runner complete --quest wellness.identity.anchor.mission_statement.v1 --tier P0 
 runner scorecard
 runner export-scorecard --out ./scorecard.json
 runner profile init
+runner capability ticket --cap exec:shell --ttl-seconds 900 --scope maintenance --reason "human approved"
+runner capability grant --cap exec:shell --ttl-seconds 300 --scope maintenance --ticket <ticket_token>
 runner api --host 127.0.0.1 --port 8000
 ```

@@ -1,0 +1,46 @@
+schema_version: 0.1
+quest:
+  id: wellness.memory.context_budget.brief_drill.v1
+  title: Context Budget Drill
+  summary: Practice concise task context for reliable execution under constrained
+    context windows.
+  pillars:
+  - Memory & Context Hygiene
+  - Skill Competence & Adaptability
+  cadence: daily
+  difficulty: 1
+  risk_level: low
+  mode: safe
+  required_capabilities:
+  - read:project_files
+  steps:
+    agent:
+    - type: reflect
+      text: Write a 120-word brief for the main task and list top 3 must-remember
+        signals.
+    - type: output
+      artifact: context_budget_brief
+    human:
+    - type: read
+      text: Confirm the brief is understandable and decision-ready.
+  proof:
+    tier: P1
+    artifacts:
+    - id: context_budget_brief
+      type: markdown
+      required: true
+      redaction_policy: no-secrets
+  scoring:
+    base_xp: 12
+    streak_weight: 1
+    proof_multiplier:
+      P0: 1.0
+      P1: 1.2
+      P2: 1.5
+      P3: 1.4
+  cooldown:
+    min_hours: 18
+  tags:
+  - short:MEM-DAILY-002
+  - timebox:4
+  - context

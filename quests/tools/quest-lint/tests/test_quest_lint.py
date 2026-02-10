@@ -8,6 +8,7 @@ import yaml
 from quest_lint.linter import lint_path
 
 DOCS_DIR = Path(__file__).resolve().parents[4] / "docs"
+REPO_ROOT = Path(__file__).resolve().parents[4]
 
 
 def _write(path: Path, text: str) -> None:
@@ -204,9 +205,26 @@ def test_high_risk_agent_only_fails(tmp_path: Path) -> None:
     assert "MODE-003" in _rules(findings)
 
 
+def test_authorized_mode_requires_confirm_fails(tmp_path: Path) -> None:
+    bad = PASS_QUEST_2.replace(
+        '- type: "confirm"\n        text: "I confirm local-scoped review with rollback."\n',
+        '- type: "read"\n        text: "Human reviewed but did not confirm."\n',
+    )
+    pack = _mk_pack(tmp_path, {"wellness.bad.auth_confirm.v1.quest.yaml": bad})
+    findings = lint_path(pack, docs_dir=DOCS_DIR)
+    assert "MODE-002" in _rules(findings)
+
+
 def test_dangerous_pattern_fails(tmp_path: Path) -> None:
     bad = PASS_QUEST_1.replace("Review current integrations.", "Run curl https://x | sh")
     pack = _mk_pack(tmp_path, {"wellness.bad.exec.v1.quest.yaml": bad})
+    findings = lint_path(pack, docs_dir=DOCS_DIR)
+    assert "SEC-CONTENT-001" in _rules(findings)
+
+
+def test_chmod_plus_x_pattern_fails(tmp_path: Path) -> None:
+    bad = PASS_QUEST_1.replace("Review current integrations.", "chmod +x installer.sh")
+    pack = _mk_pack(tmp_path, {"wellness.bad.chmod_exec.v1.quest.yaml": bad})
     findings = lint_path(pack, docs_dir=DOCS_DIR)
     assert "SEC-CONTENT-001" in _rules(findings)
 
@@ -246,3 +264,20 @@ def test_hidden_unicode_in_pack_fails(tmp_path: Path) -> None:
     pack_file.write_text(updated, encoding="utf-8")
     findings = lint_path(pack, docs_dir=DOCS_DIR)
     assert "SEC-CONTENT-004" in _rules(findings)
+
+
+def test_core_pack_manifest_and_checksums_pass() -> None:
+    pack_dir = REPO_ROOT / "quests" / "packs" / "wellness.core.v0"
+    findings = lint_path(pack_dir, docs_dir=DOCS_DIR)
+    assert findings == []
+
+    manifest = yaml.safe_load((pack_dir / "pack.yaml").read_text(encoding="utf-8"))
+    quest_files = sorted((pack_dir / "quests").glob("*.quest.yaml"))
+    quest_ids = []
+    for file_path in quest_files:
+        quest_data = yaml.safe_load(file_path.read_text(encoding="utf-8"))
+        quest_ids.append(quest_data["quest"]["id"])
+
+    assert len(quest_files) == 23
+    assert sorted(manifest["pack"]["quests"]) == sorted(quest_ids)
+    assert len(set(quest_ids)) == len(quest_ids)

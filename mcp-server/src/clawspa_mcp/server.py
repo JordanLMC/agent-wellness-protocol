@@ -3,12 +3,22 @@ from __future__ import annotations
 import argparse
 import ipaddress
 import json
+import re
 import sys
 from datetime import date
 from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode, urlsplit
 from urllib.request import Request, urlopen
+
+from clawspa_runner.security import payload_contains_pii, payload_contains_secrets, payload_requests_raw_logs
+
+
+QUEST_ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9._-]{2,159}$")
+DATE_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+MAX_ARTIFACTS = 8
+MAX_STRING_LENGTH = 1024
+MAX_PROFILE_PATCH_BYTES = 8 * 1024
 
 
 TOOL_SCHEMAS = [
@@ -95,6 +105,7 @@ class MCPBridge:
             raise RuntimeError(f"API request failed: {exc}") from exc
 
     def call_tool(self, name: str, arguments: dict[str, Any]) -> Any:
+        validate_tool_arguments(name, arguments)
         if name == "get_daily_quests":
             target = arguments.get("date") or date.today().isoformat()
             return self._request("GET", "/v1/plans/daily", params={"date": target})
@@ -131,6 +142,94 @@ def deep_merge(base: dict[str, Any], patch: dict[str, Any]) -> dict[str, Any]:
         else:
             merged[key] = value
     return merged
+
+
+def _validate_safe_text(value: str, *, field: str, max_length: int = MAX_STRING_LENGTH) -> None:
+    if len(value) > max_length:
+        raise ValueError(f"{field} exceeds {max_length} characters.")
+    if payload_contains_secrets(value):
+        raise ValueError(f"{field} appears to contain secret-like content.")
+    if payload_contains_pii(value):
+        raise ValueError(f"{field} appears to contain PII-like content.")
+    if payload_requests_raw_logs(value):
+        raise ValueError(f"{field} appears to contain raw log text.")
+
+
+def _iter_strings(node: Any) -> list[str]:
+    if isinstance(node, str):
+        return [node]
+    if isinstance(node, list):
+        values: list[str] = []
+        for item in node:
+            values.extend(_iter_strings(item))
+        return values
+    if isinstance(node, dict):
+        values = []
+        for key, value in node.items():
+            if isinstance(key, str):
+                values.append(key)
+            values.extend(_iter_strings(value))
+        return values
+    return []
+
+
+def validate_tool_arguments(name: str, arguments: dict[str, Any]) -> None:
+    if not isinstance(arguments, dict):
+        raise ValueError("Tool arguments must be an object.")
+    if name == "get_daily_quests":
+        target = arguments.get("date")
+        if target is None:
+            return
+        if not isinstance(target, str) or not DATE_PATTERN.match(target):
+            raise ValueError("date must be YYYY-MM-DD.")
+        date.fromisoformat(target)
+        return
+    if name == "get_quest":
+        quest_id = arguments.get("quest_id")
+        if not isinstance(quest_id, str) or not QUEST_ID_PATTERN.match(quest_id):
+            raise ValueError("quest_id must be a canonical quest identifier.")
+        _validate_safe_text(quest_id, field="quest_id", max_length=160)
+        return
+    if name == "submit_proof":
+        quest_id = arguments.get("quest_id")
+        tier = arguments.get("tier")
+        artifacts = arguments.get("artifacts")
+        if not isinstance(quest_id, str) or not QUEST_ID_PATTERN.match(quest_id):
+            raise ValueError("quest_id must be a canonical quest identifier.")
+        if tier not in {"P0", "P1", "P2", "P3"}:
+            raise ValueError("tier must be one of P0|P1|P2|P3.")
+        if not isinstance(artifacts, list):
+            raise ValueError("artifacts must be an array.")
+        if len(artifacts) > MAX_ARTIFACTS:
+            raise ValueError(f"artifacts exceeds max of {MAX_ARTIFACTS}.")
+        for idx, artifact in enumerate(artifacts):
+            if not isinstance(artifact, dict):
+                raise ValueError(f"artifacts[{idx}] must be an object.")
+            ref = artifact.get("ref")
+            if not isinstance(ref, str) or not ref.strip():
+                raise ValueError(f"artifacts[{idx}].ref is required.")
+            _validate_safe_text(ref, field=f"artifacts[{idx}].ref", max_length=512)
+            summary = artifact.get("summary")
+            if summary is not None:
+                if not isinstance(summary, str):
+                    raise ValueError(f"artifacts[{idx}].summary must be a string.")
+                _validate_safe_text(summary, field=f"artifacts[{idx}].summary", max_length=280)
+        return
+    if name == "update_agent_profile":
+        patch = arguments.get("profile_patch")
+        if not isinstance(patch, dict):
+            raise ValueError("profile_patch must be an object.")
+        payload_bytes = len(json.dumps(patch).encode("utf-8"))
+        if payload_bytes > MAX_PROFILE_PATCH_BYTES:
+            raise ValueError(f"profile_patch exceeds {MAX_PROFILE_PATCH_BYTES} bytes.")
+        for string_value in _iter_strings(patch):
+            _validate_safe_text(string_value, field="profile_patch", max_length=MAX_STRING_LENGTH)
+        return
+    if name in {"get_scorecard", "get_profiles"}:
+        if arguments:
+            raise ValueError(f"{name} does not accept arguments.")
+        return
+    raise ValueError(f"Unknown tool: {name}")
 
 
 def is_local_host(hostname: str) -> bool:

@@ -1,0 +1,46 @@
+schema_version: 0.1
+quest:
+  id: wellness.incident.supply_chain.tabletop.v1
+  title: Tabletop Incident Drill (Skill Supply Chain)
+  summary: Practice isolation and recovery flow for malicious skill/plugin scenario.
+  pillars:
+  - Security & Access Control
+  - Tool / Integration Hygiene
+  cadence: monthly
+  difficulty: 3
+  risk_level: medium
+  mode: safe
+  required_capabilities:
+  - read:installed_skills
+  steps:
+    human:
+    - type: warn
+      text: Stop and escalate if compromise appears active in production systems.
+    - type: checklist
+      items:
+      - Walk isolate -> uninstall -> audit actions -> restore -> attest flow.
+      - Record one preventative control improvement.
+    agent:
+    - type: output
+      artifact: supply_chain_drill_note
+  proof:
+    tier: P1
+    artifacts:
+    - id: supply_chain_drill_note
+      type: markdown
+      required: true
+      redaction_policy: no-secrets
+  scoring:
+    base_xp: 42
+    streak_weight: 3
+    proof_multiplier:
+      P0: 1.0
+      P1: 1.2
+      P2: 1.5
+      P3: 1.4
+  cooldown:
+    min_hours: 720
+  tags:
+  - short:INCIDENT-MONTHLY-002
+  - timebox:60
+  - incident

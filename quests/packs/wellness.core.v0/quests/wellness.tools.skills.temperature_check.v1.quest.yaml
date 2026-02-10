@@ -1,0 +1,47 @@
+schema_version: 0.1
+quest:
+  id: wellness.tools.skills.temperature_check.v1
+  title: Skill/Plugin Temperature Check
+  summary: Identify newly added or changed skills/plugins and queue provenance review.
+  pillars:
+  - Tool / Integration Hygiene
+  - Security & Access Control
+  cadence: daily
+  difficulty: 2
+  risk_level: medium
+  mode: safe
+  required_capabilities:
+  - read:installed_skills
+  steps:
+    human:
+    - type: warn
+      text: Stop and ask human owner if an unknown plugin source appears.
+    - type: checklist
+      items:
+      - List installed skills/plugins with source metadata.
+      - Mark additions or changes since last check.
+      - Queue suspicious entries for weekly provenance review.
+    agent:
+    - type: output
+      artifact: skill_temperature_report
+  proof:
+    tier: P1
+    artifacts:
+    - id: skill_temperature_report
+      type: json
+      required: true
+      redaction_policy: no-secrets
+  scoring:
+    base_xp: 20
+    streak_weight: 1
+    proof_multiplier:
+      P0: 1.0
+      P1: 1.2
+      P2: 1.5
+      P3: 1.4
+  cooldown:
+    min_hours: 18
+  tags:
+  - short:TOOL-DAILY-002
+  - timebox:5
+  - plugins
