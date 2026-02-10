@@ -15,6 +15,7 @@ Thin MCP wrapper over the local runner API.
 
 - Tool schemas accept references/metadata only.
 - No raw file contents accepted.
+- Tool arguments are validated for secret/PII/raw-log patterns and bounded sizes.
 - Intended for localhost API bridge usage.
 - `--api-base` is localhost-only by default.
 - Use `--allow-nonlocal` only for explicit trusted deployments.
