@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+"""HTTP API surface for local-first runner operations."""
+
 from datetime import date
 from typing import Any
 
@@ -10,40 +12,62 @@ from .service import RunnerService
 
 
 class ProofArtifact(BaseModel):
+    """One redacted proof reference submitted for quest completion."""
+
     ref: str = Field(min_length=1, max_length=512)
     summary: str | None = Field(default=None, max_length=280)
 
 
 class ProofRequest(BaseModel):
+    """Payload for `/v1/proofs` with optional actor identity override."""
+
     quest_id: str
     tier: str
     artifacts: list[ProofArtifact] = Field(default_factory=list)
     mode: str = "agent"
+    actor_id: str | None = Field(default=None, max_length=200)
 
 
 class GrantRequest(BaseModel):
+    """Capability grant request gated by a human-issued ticket token."""
+
     capabilities: list[str] = Field(default_factory=list)
     ttl_seconds: int = 3600
     scope: str = "manual"
     ticket_token: str = Field(min_length=1)
+    actor_id: str | None = Field(default=None, max_length=200)
 
 
 class RevokeRequest(BaseModel):
+    """Capability revoke request scoped by grant id or capability name."""
+
     grant_id: str | None = None
     capability: str | None = None
+    actor_id: str | None = Field(default=None, max_length=200)
 
 
 def create_app(service: RunnerService) -> FastAPI:
+    """Create API routes backed by `RunnerService` with actor/source attribution."""
+
     app = FastAPI(title="ClawSpa Runner API", version="0.1")
 
-    def request_context(request: Request, default_actor: str = "human") -> tuple[str, str]:
+    def request_context(
+        request: Request,
+        default_actor: str = "human",
+        body_actor_id: str | None = None,
+    ) -> tuple[str, str, str]:
+        """Resolve normalized `(source, actor_kind, actor_id)` with header precedence."""
+
         source = request.headers.get("x-clawspa-source", "api").strip().lower()
         actor = request.headers.get("x-clawspa-actor", default_actor).strip().lower()
+        header_actor_id = (request.headers.get("x-clawspa-actor-id") or "").strip()
+        body_actor_id_value = (body_actor_id or "").strip()
+        actor_id = header_actor_id or body_actor_id_value or "unknown"
         if source not in {"cli", "api", "mcp"}:
             source = "api"
         if actor not in {"human", "agent", "system"}:
             actor = default_actor
-        return source, actor
+        return source, actor, actor_id
 
     @app.get("/v1/health")
     def health() -> dict[str, Any]:
@@ -92,8 +116,8 @@ def create_app(service: RunnerService) -> FastAPI:
     @app.put("/v1/profiles/human")
     def put_human_profile(profile: dict[str, Any], request: Request) -> dict[str, Any]:
         try:
-            source, actor = request_context(request, default_actor="human")
-            return service.put_profile("human", profile, source=source, actor=actor)
+            source, actor, actor_id = request_context(request, default_actor="human")
+            return service.put_profile("human", profile, source=source, actor=actor, actor_id=actor_id)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -104,8 +128,8 @@ def create_app(service: RunnerService) -> FastAPI:
     @app.put("/v1/profiles/agent")
     def put_agent_profile(profile: dict[str, Any], request: Request) -> dict[str, Any]:
         try:
-            source, actor = request_context(request, default_actor="agent")
-            return service.put_profile("agent", profile, source=source, actor=actor)
+            source, actor, actor_id = request_context(request, default_actor="agent")
+            return service.put_profile("agent", profile, source=source, actor=actor, actor_id=actor_id)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -124,8 +148,8 @@ def create_app(service: RunnerService) -> FastAPI:
     ) -> dict[str, Any]:
         try:
             target = date_from_str(date)
-            source, actor = request_context(request, default_actor="human")
-            return service.get_daily_plan(target, source=source, actor=actor)
+            source, actor, actor_id = request_context(request, default_actor="human")
+            return service.get_daily_plan(target, source=source, actor=actor, actor_id=actor_id)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -136,8 +160,8 @@ def create_app(service: RunnerService) -> FastAPI:
     ) -> dict[str, Any]:
         try:
             target = date_from_str(date)
-            source, actor = request_context(request, default_actor="human")
-            return service.generate_daily_plan(target, source=source, actor=actor)
+            source, actor, actor_id = request_context(request, default_actor="human")
+            return service.generate_daily_plan(target, source=source, actor=actor, actor_id=actor_id)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -146,14 +170,19 @@ def create_app(service: RunnerService) -> FastAPI:
         artifact_refs = [item.ref for item in request.artifacts]
         primary_artifact = artifact_refs[0] if artifact_refs else ""
         try:
-            source, _ = request_context(http_request, default_actor=request.mode if request.mode in {"human", "agent"} else "agent")
+            source, actor_kind, actor_id = request_context(
+                http_request,
+                default_actor=request.mode if request.mode in {"human", "agent"} else "agent",
+                body_actor_id=request.actor_id,
+            )
             return service.complete_quest(
                 request.quest_id,
                 request.tier,
                 primary_artifact,
-                actor_mode=request.mode,
+                actor_mode=actor_kind,
                 artifacts=artifact_refs[1:],
                 source=source,
+                actor_id=actor_id,
             )
         except (ValueError, PermissionError) as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -183,7 +212,7 @@ def create_app(service: RunnerService) -> FastAPI:
     @app.post("/v1/capabilities/grant")
     def grant_capabilities(request: GrantRequest, http_request: Request) -> dict[str, Any]:
         try:
-            source, actor = request_context(http_request, default_actor="human")
+            source, actor, actor_id = request_context(http_request, default_actor="human", body_actor_id=request.actor_id)
             return service.grant_capabilities_with_ticket(
                 capabilities=request.capabilities,
                 ttl_seconds=request.ttl_seconds,
@@ -191,6 +220,7 @@ def create_app(service: RunnerService) -> FastAPI:
                 ticket_token=request.ticket_token,
                 source=source,
                 actor=actor,
+                actor_id=actor_id,
             )
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -198,12 +228,13 @@ def create_app(service: RunnerService) -> FastAPI:
     @app.post("/v1/capabilities/revoke")
     def revoke_capabilities(request: RevokeRequest, http_request: Request) -> dict[str, Any]:
         try:
-            source, actor = request_context(http_request, default_actor="human")
+            source, actor, actor_id = request_context(http_request, default_actor="human", body_actor_id=request.actor_id)
             return service.revoke_capability(
                 grant_id=request.grant_id,
                 capability=request.capability,
                 source=source,
                 actor=actor,
+                actor_id=actor_id,
             )
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -212,4 +243,6 @@ def create_app(service: RunnerService) -> FastAPI:
 
 
 def date_from_str(value: str) -> date:
+    """Parse `YYYY-MM-DD` into a date object."""
+
     return date.fromisoformat(value)

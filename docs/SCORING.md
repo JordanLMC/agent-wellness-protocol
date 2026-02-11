@@ -199,7 +199,7 @@ Proof multiplier:
 - P0: ×1.0
 - P1: ×1.2
 - P2: ×1.5
-- P3: ×1.4 (human attestation adds trust, but don’t out-reward P2 automation)
+- P3: ×1.5 (keep multipliers monotonic; attestation can match P2 but should not exceed it by default)
 
 ### 6.3 “Found a risk” bonus (no shame bonus)
 If a quest uncovers a real issue, award a small bonus so discovery feels good:

@@ -35,6 +35,7 @@ We treat this as **one product with three surfaces**:
 
 - **Local-first**: run checks locally; keep sensitive data local by default.
 - **Safe Mode by default**: no risky capabilities until explicitly granted.
+- **Explicit actor attribution**: record actor kind and actor id so multi-actor environments (human + multiple agents + systems) remain auditable.
 - **Separation of concerns**:
   - Content (quests) is separate from code (runner).
   - XP is separate from trust.
@@ -60,6 +61,7 @@ We treat this as **one product with three surfaces**:
   - quest completion history
   - local proofs (redacted and/or hashed)
   - local telemetry events (sanitized, append-only JSONL)
+  - actor-attributed telemetry (`actor.kind`, `actor.id`) for per-actor analysis
 
 ### C) MCP / Tool Server (optional, but likely)
 - Exposes tools like:

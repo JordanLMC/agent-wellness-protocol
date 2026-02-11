@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+"""MCP bridge that forwards validated tool calls to the local runner API."""
+
 import argparse
 import ipaddress
 import json
@@ -25,14 +27,18 @@ TOOL_SCHEMAS = [
     {
         "name": "get_daily_quests",
         "description": "Get daily quest plan for a date (defaults to today).",
-        "input_schema": {"type": "object", "properties": {"date": {"type": "string"}}, "additionalProperties": False},
+        "input_schema": {
+            "type": "object",
+            "properties": {"date": {"type": "string"}, "actor_id": {"type": "string"}},
+            "additionalProperties": False,
+        },
     },
     {
         "name": "get_quest",
         "description": "Get one quest by canonical quest_id.",
         "input_schema": {
             "type": "object",
-            "properties": {"quest_id": {"type": "string"}},
+            "properties": {"quest_id": {"type": "string"}, "actor_id": {"type": "string"}},
             "required": ["quest_id"],
             "additionalProperties": False,
         },
@@ -54,6 +60,7 @@ TOOL_SCHEMAS = [
                         "additionalProperties": False,
                     },
                 },
+                "actor_id": {"type": "string"},
             },
             "required": ["quest_id", "tier", "artifacts"],
             "additionalProperties": False,
@@ -62,19 +69,19 @@ TOOL_SCHEMAS = [
     {
         "name": "get_scorecard",
         "description": "Get current local scorecard.",
-        "input_schema": {"type": "object", "properties": {}, "additionalProperties": False},
+        "input_schema": {"type": "object", "properties": {"actor_id": {"type": "string"}}, "additionalProperties": False},
     },
     {
         "name": "get_profiles",
         "description": "Get human, agent, and alignment profiles.",
-        "input_schema": {"type": "object", "properties": {}, "additionalProperties": False},
+        "input_schema": {"type": "object", "properties": {"actor_id": {"type": "string"}}, "additionalProperties": False},
     },
     {
         "name": "update_agent_profile",
         "description": "Patch and update agent profile fields.",
         "input_schema": {
             "type": "object",
-            "properties": {"profile_patch": {"type": "object"}},
+            "properties": {"profile_patch": {"type": "object"}, "actor_id": {"type": "string"}},
             "required": ["profile_patch"],
             "additionalProperties": False,
         },
@@ -83,18 +90,30 @@ TOOL_SCHEMAS = [
 
 
 class MCPBridge:
-    def __init__(self, api_base: str, *, allow_nonlocal: bool = False) -> None:
-        self.api_base = validate_api_base(api_base, allow_nonlocal=allow_nonlocal)
+    """Thin API client that injects MCP source and actor identity headers."""
 
-    def _request(self, method: str, path: str, params: dict[str, Any] | None = None, body: dict[str, Any] | None = None) -> Any:
+    def __init__(self, api_base: str, *, allow_nonlocal: bool = False, actor_id: str = "mcp:unknown") -> None:
+        self.api_base = validate_api_base(api_base, allow_nonlocal=allow_nonlocal)
+        self.actor_id = actor_id
+
+    def _request(
+        self,
+        method: str,
+        path: str,
+        params: dict[str, Any] | None = None,
+        body: dict[str, Any] | None = None,
+        actor_id: str | None = None,
+    ) -> Any:
         url = f"{self.api_base}{path}"
         if params:
             url = f"{url}?{urlencode(params)}"
         data = None
+        effective_actor_id = actor_id or self.actor_id
         headers = {
             "Content-Type": "application/json",
             "X-Clawspa-Source": "mcp",
             "X-Clawspa-Actor": "agent",
+            "X-Clawspa-Actor-Id": effective_actor_id,
         }
         if body is not None:
             data = json.dumps(body).encode("utf-8")
@@ -110,35 +129,39 @@ class MCPBridge:
 
     def call_tool(self, name: str, arguments: dict[str, Any]) -> Any:
         validate_tool_arguments(name, arguments)
+        actor_id = arguments.get("actor_id") or self.actor_id
         if name == "get_daily_quests":
             target = arguments.get("date") or date.today().isoformat()
-            return self._request("GET", "/v1/plans/daily", params={"date": target})
+            return self._request("GET", "/v1/plans/daily", params={"date": target}, actor_id=actor_id)
         if name == "get_quest":
-            return self._request("GET", f"/v1/quests/{arguments['quest_id']}")
+            return self._request("GET", f"/v1/quests/{arguments['quest_id']}", actor_id=actor_id)
         if name == "submit_proof":
             payload = {
                 "quest_id": arguments["quest_id"],
                 "tier": arguments["tier"],
                 "artifacts": arguments.get("artifacts", []),
                 "mode": "agent",
+                "actor_id": actor_id,
             }
-            return self._request("POST", "/v1/proofs", body=payload)
+            return self._request("POST", "/v1/proofs", body=payload, actor_id=actor_id)
         if name == "get_scorecard":
-            return self._request("GET", "/v1/scorecard")
+            return self._request("GET", "/v1/scorecard", actor_id=actor_id)
         if name == "get_profiles":
             return {
-                "human": self._request("GET", "/v1/profiles/human"),
-                "agent": self._request("GET", "/v1/profiles/agent"),
-                "alignment_snapshot": self._request("GET", "/v1/profiles/alignment_snapshot"),
+                "human": self._request("GET", "/v1/profiles/human", actor_id=actor_id),
+                "agent": self._request("GET", "/v1/profiles/agent", actor_id=actor_id),
+                "alignment_snapshot": self._request("GET", "/v1/profiles/alignment_snapshot", actor_id=actor_id),
             }
         if name == "update_agent_profile":
-            current = self._request("GET", "/v1/profiles/agent")
+            current = self._request("GET", "/v1/profiles/agent", actor_id=actor_id)
             merged = deep_merge(current, arguments.get("profile_patch", {}))
-            return self._request("PUT", "/v1/profiles/agent", body=merged)
+            return self._request("PUT", "/v1/profiles/agent", body=merged, actor_id=actor_id)
         raise ValueError(f"Unknown tool: {name}")
 
 
 def deep_merge(base: dict[str, Any], patch: dict[str, Any]) -> dict[str, Any]:
+    """Recursively merge `patch` into `base` without mutating the input mapping."""
+
     merged = dict(base)
     for key, value in patch.items():
         if isinstance(value, dict) and isinstance(merged.get(key), dict):
@@ -178,8 +201,17 @@ def _iter_strings(node: Any) -> list[str]:
 
 
 def validate_tool_arguments(name: str, arguments: dict[str, Any]) -> None:
+    """Validate MCP tool arguments and reject secret/PII-like payloads."""
+
     if not isinstance(arguments, dict):
         raise ValueError("Tool arguments must be an object.")
+
+    actor_id = arguments.get("actor_id")
+    if actor_id is not None:
+        if not isinstance(actor_id, str):
+            raise ValueError("actor_id must be a string.")
+        _validate_safe_text(actor_id, field="actor_id", max_length=200)
+
     if name == "get_daily_quests":
         target = arguments.get("date")
         if target is None:
@@ -230,7 +262,8 @@ def validate_tool_arguments(name: str, arguments: dict[str, Any]) -> None:
             _validate_safe_text(string_value, field="profile_patch", max_length=MAX_STRING_LENGTH)
         return
     if name in {"get_scorecard", "get_profiles"}:
-        if arguments:
+        allowed = {"actor_id"}
+        if any(key not in allowed for key in arguments):
             raise ValueError(f"{name} does not accept arguments.")
         return
     raise ValueError(f"Unknown tool: {name}")
@@ -247,6 +280,8 @@ def is_local_host(hostname: str) -> bool:
 
 
 def validate_api_base(api_base: str, *, allow_nonlocal: bool = False) -> str:
+    """Validate runner API base URL with localhost-only default safety guard."""
+
     parsed = urlsplit(api_base)
     if parsed.scheme not in {"http", "https"}:
         raise ValueError("api-base must use http or https scheme.")
@@ -270,6 +305,8 @@ def _write_response(response_id: Any, result: Any = None, error: str | None = No
 
 
 def serve_stdio(bridge: MCPBridge) -> int:
+    """Serve minimal MCP-style JSON-RPC requests over stdio."""
+
     for line in sys.stdin:
         line = line.strip()
         if not line:
@@ -301,6 +338,8 @@ def serve_stdio(bridge: MCPBridge) -> int:
 
 
 def main() -> int:
+    """CLI entrypoint for stdio server mode or one-shot tool invocation."""
+
     parser = argparse.ArgumentParser(description="ClawSpa MCP wrapper over local runner API.")
     parser.add_argument("--api-base", default="http://127.0.0.1:8000", help="Local runner API base URL.")
     parser.add_argument(
@@ -308,11 +347,12 @@ def main() -> int:
         action="store_true",
         help="Allow non-local api-base hosts (off by default for safety).",
     )
+    parser.add_argument("--actor-id", default="mcp:unknown", help="Default actor id for MCP-originated calls.")
     parser.add_argument("--tool", help="Optional direct tool call mode.")
     parser.add_argument("--args-json", default="{}", help="Tool arguments in JSON.")
     args = parser.parse_args()
 
-    bridge = MCPBridge(api_base=args.api_base, allow_nonlocal=args.allow_nonlocal)
+    bridge = MCPBridge(api_base=args.api_base, allow_nonlocal=args.allow_nonlocal, actor_id=args.actor_id)
     if args.tool:
         tool_args = json.loads(args.args_json)
         print(json.dumps(bridge.call_tool(args.tool, tool_args), indent=2))

@@ -19,6 +19,7 @@ Owner: Project Team
 ## Required checks before merge
 
 - `python scripts/check_bidi.py .`
+  - Scans git-tracked UTF-8 text files, including extensionless files such as `Dockerfile` and `Makefile`.
 - `pytest --basetemp .pytest_tmp`
 - `quest-lint quests --format text`
 
