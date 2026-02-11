@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+"""Telemetry event sanitization, persistence, and local summary export helpers."""
+
 import json
 import platform
 import re
@@ -67,6 +69,8 @@ def _strip_control_chars(value: str) -> str:
 
 @dataclass(frozen=True)
 class BuildInfo:
+    """Static build/runtime metadata attached to every telemetry event."""
+
     runner_version: str
     git_sha: str | None
     python_version: str
@@ -83,6 +87,8 @@ class BuildInfo:
 
 @dataclass(frozen=True)
 class SanitizeStats:
+    """Counts for redactions and truncations emitted during sanitization."""
+
     redacted_fields: int = 0
     truncated_fields: int = 0
 
@@ -106,6 +112,8 @@ def _sanitize_text(value: str, *, empty_fallback: str | None = None) -> tuple[st
 
 
 def sanitize_actor_id(value: Any) -> str:
+    """Normalize actor identity to a safe string and redact risky payloads."""
+
     text = "unknown" if value is None else str(value)
     sanitized, _ = _sanitize_text(text, empty_fallback="unknown")
     if not sanitized:
@@ -119,6 +127,8 @@ def normalize_actor_model(
     actor_id: Any | None = None,
     default_kind: str = "system",
 ) -> dict[str, str]:
+    """Return canonical actor model `{kind, id}` for events and exports."""
+
     raw_kind: Any = default_kind
     raw_id: Any | None = actor_id
 
@@ -147,6 +157,8 @@ def normalize_actor_model(
 
 
 def normalize_event_actor(event: dict[str, Any]) -> dict[str, str]:
+    """Read actor information from legacy or modern event payload shapes."""
+
     actor_value = event.get("actor")
     if isinstance(actor_value, dict):
         return normalize_actor_model(actor_value, default_kind="system")
@@ -156,6 +168,8 @@ def normalize_event_actor(event: dict[str, Any]) -> dict[str, str]:
 
 
 def normalize_event_source(event: dict[str, Any]) -> str:
+    """Return normalized event source with a safe default."""
+
     source = event.get("source")
     if isinstance(source, str):
         candidate = source.strip().lower()
@@ -175,6 +189,8 @@ def _sanitize_scalar(value: Any) -> tuple[Any, SanitizeStats]:
 
 
 def sanitize_event_data(data: Any) -> tuple[Any, SanitizeStats]:
+    """Recursively sanitize telemetry payloads for secrets, PII, and controls."""
+
     if isinstance(data, dict):
         sanitized: dict[str, Any] = {}
         stats = SanitizeStats()
@@ -197,6 +213,8 @@ def sanitize_event_data(data: Any) -> tuple[Any, SanitizeStats]:
 
 
 def parse_range(range_value: str) -> timedelta:
+    """Parse compact duration windows such as `7d` or `24h`."""
+
     match = RANGE_PATTERN.match(range_value.strip().lower())
     if not match:
         raise ValueError("range must be like 7d or 24h")
@@ -210,6 +228,8 @@ def parse_range(range_value: str) -> timedelta:
 
 
 def detect_git_sha(repo_root: Path) -> str | None:
+    """Best-effort short commit hash for build provenance metadata."""
+
     try:
         output = subprocess.run(  # noqa: S603
             ["git", "rev-parse", "--short", "HEAD"],
@@ -228,6 +248,8 @@ def detect_git_sha(repo_root: Path) -> str | None:
 
 
 def detect_runner_version() -> str:
+    """Resolve installed package version with local fallback."""
+
     try:
         return package_version("clawspa")
     except PackageNotFoundError:
@@ -235,6 +257,8 @@ def detect_runner_version() -> str:
 
 
 class TelemetryLogger:
+    """Append-only telemetry logger with local summary export helpers."""
+
     def __init__(self, events_path: Path, repo_root: Path) -> None:
         self.events_path = events_path
         self.events_path.parent.mkdir(parents=True, exist_ok=True)
@@ -294,6 +318,8 @@ class TelemetryLogger:
         actor_id: str | None = None,
         _emit_sanitize_flag: bool = True,
     ) -> None:
+        """Write one sanitized event and optional sanitization risk flag."""
+
         try:
             sanitized_data, stats = sanitize_event_data(data)
             event_payload = self._base_event(
@@ -362,6 +388,8 @@ class TelemetryLogger:
         out_path: Path | None = None,
         actor_id: str | None = None,
     ) -> dict[str, Any]:
+        """Aggregate windowed telemetry metrics, optionally filtered by actor id."""
+
         window = parse_range(range_value)
         end = _utc_now()
         start = end - window
@@ -449,6 +477,8 @@ class TelemetryLogger:
 
 
 def hashlib_sha256_hex(value: str) -> str:
+    """Return SHA-256 hex digest for sensitive identifier hashing."""
+
     import hashlib
 
     return hashlib.sha256(value.encode("utf-8")).hexdigest()

@@ -8,17 +8,17 @@ pack:
     contact: security@agentwellness.example
   version: 0.1.0
   license: Apache-2.0
-  created_at: "2026-02-10"
+  created_at: '2026-02-10'
   quests:
-    - wellness.home_security.wifi.posture_check.v1
-    - wellness.home_security.bluetooth.hygiene_check.v1
-    - wellness.home_security.local_exposure.inventory.v1
+  - wellness.home_security.bluetooth.hygiene_check.v1
+  - wellness.home_security.local_exposure.inventory.v1
+  - wellness.home_security.wifi.posture_check.v1
   checksums:
     algo: sha256
     files:
-      quests/wellness.home_security.wifi.posture_check.v1.quest.yaml: 79383fa2e0d27f1026cf2093596f30625bd11e90484eb6baae9aaa800d415ea8
-      quests/wellness.home_security.bluetooth.hygiene_check.v1.quest.yaml: eb42dd93d7f37d8e36ac40432863ef9a7cb0bc5d43ce1e525dac75144b9ef578
-      quests/wellness.home_security.local_exposure.inventory.v1.quest.yaml: e7ac5444841903c9911b5d2b6bc325cae518f924dccd12429b1bd25bc45361bf
+      quests/wellness.home_security.bluetooth.hygiene_check.v1.quest.yaml: 3ebc7348682f1701ff6cc4397afc8d5f72756f36c71a46c026ced5d4503d2806
+      quests/wellness.home_security.local_exposure.inventory.v1.quest.yaml: 1277fb361647534ccb80a7f3722cf039d79c7f353435ccc1dfd46adc4ade5b67
+      quests/wellness.home_security.wifi.posture_check.v1.quest.yaml: 4385dd55711dd49d602ad81bb0638591b64efd41aedb97eff558e887261e76f6
   signing:
     scheme: none
     signature: null

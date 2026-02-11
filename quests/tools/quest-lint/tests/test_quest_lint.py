@@ -288,3 +288,31 @@ def test_core_pack_manifest_and_checksums_pass() -> None:
     assert sorted(manifest["pack"]["quests"]) == sorted(quest_ids)
     assert len(set(quest_ids)) == len(quest_ids)
     assert authorized_quests_with_confirm >= 1
+
+
+def test_home_security_pack_manifest_and_checksums_pass() -> None:
+    pack_dir = REPO_ROOT / "quests" / "packs" / "wellness.home_security.v0"
+    findings = lint_path(pack_dir, docs_dir=DOCS_DIR)
+    assert findings == []
+
+    manifest = yaml.safe_load((pack_dir / "pack.yaml").read_text(encoding="utf-8"))
+    quest_files = sorted((pack_dir / "quests").glob("*.quest.yaml"))
+    quest_ids = []
+    for file_path in quest_files:
+        quest_data = yaml.safe_load(file_path.read_text(encoding="utf-8"))
+        quest_ids.append(quest_data["quest"]["id"])
+
+    assert len(quest_files) == 3
+    assert sorted(manifest["pack"]["quests"]) == sorted(quest_ids)
+    assert len(set(quest_ids)) == len(quest_ids)
+
+
+def test_home_security_pack_proof_multiplier_is_monotonic() -> None:
+    pack_dir = REPO_ROOT / "quests" / "packs" / "wellness.home_security.v0"
+    quest_files = sorted((pack_dir / "quests").glob("*.quest.yaml"))
+
+    for file_path in quest_files:
+        quest_data = yaml.safe_load(file_path.read_text(encoding="utf-8"))
+        multipliers = quest_data["quest"]["scoring"]["proof_multiplier"]
+        values = [float(multipliers[tier]) for tier in ("P0", "P1", "P2", "P3")]
+        assert values == sorted(values), f"proof_multiplier is not monotonic in {file_path.name}: {values}"

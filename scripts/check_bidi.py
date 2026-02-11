@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Scan tracked text files for bidi/invisible Unicode control characters."""
+"""Scan repository files for bidi and invisible Unicode control characters."""
 
 from __future__ import annotations
 
@@ -30,8 +30,6 @@ EXPLICIT_SUSPICIOUS_CODEPOINTS = {
     0x2069,  # POP DIRECTIONAL ISOLATE
     0xFEFF,  # ZERO WIDTH NO-BREAK SPACE/BOM
 }
-
-TEXT_SUFFIXES = {".py", ".md", ".yaml", ".yml", ".toml", ".json", ".txt"}
 
 SKIP_DIRS = {
     ".git",
@@ -66,10 +64,6 @@ def find_controls(text: str) -> list[tuple[int, int, str, str]]:
             if is_suspicious_char(char):
                 findings.append((line_number, column_number, char, escaped_snippet(line, column_number)))
     return findings
-
-
-def is_text_target(path: Path) -> bool:
-    return path.suffix.lower() in TEXT_SUFFIXES
 
 
 def is_probably_utf8_text(path: Path) -> bool:
@@ -145,16 +139,13 @@ def walk_filesystem(root: Path) -> list[Path]:
 
 def iter_candidate_files(root: Path) -> Iterable[Path]:
     if root.is_file():
-        candidate = root.resolve()
-        if is_text_target(candidate):
-            yield candidate
+        yield root.resolve()
         return
 
     tracked = git_tracked_files(root)
     paths = tracked if tracked else walk_filesystem(root)
     for path in sorted(set(paths)):
-        if is_text_target(path):
-            yield path
+        yield path
 
 
 def display_path(path: Path, root: Path) -> str:

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+"""MCP bridge that forwards validated tool calls to the local runner API."""
+
 import argparse
 import ipaddress
 import json
@@ -88,6 +90,8 @@ TOOL_SCHEMAS = [
 
 
 class MCPBridge:
+    """Thin API client that injects MCP source and actor identity headers."""
+
     def __init__(self, api_base: str, *, allow_nonlocal: bool = False, actor_id: str = "mcp:unknown") -> None:
         self.api_base = validate_api_base(api_base, allow_nonlocal=allow_nonlocal)
         self.actor_id = actor_id
@@ -156,6 +160,8 @@ class MCPBridge:
 
 
 def deep_merge(base: dict[str, Any], patch: dict[str, Any]) -> dict[str, Any]:
+    """Recursively merge `patch` into `base` without mutating the input mapping."""
+
     merged = dict(base)
     for key, value in patch.items():
         if isinstance(value, dict) and isinstance(merged.get(key), dict):
@@ -195,6 +201,8 @@ def _iter_strings(node: Any) -> list[str]:
 
 
 def validate_tool_arguments(name: str, arguments: dict[str, Any]) -> None:
+    """Validate MCP tool arguments and reject secret/PII-like payloads."""
+
     if not isinstance(arguments, dict):
         raise ValueError("Tool arguments must be an object.")
 
@@ -272,6 +280,8 @@ def is_local_host(hostname: str) -> bool:
 
 
 def validate_api_base(api_base: str, *, allow_nonlocal: bool = False) -> str:
+    """Validate runner API base URL with localhost-only default safety guard."""
+
     parsed = urlsplit(api_base)
     if parsed.scheme not in {"http", "https"}:
         raise ValueError("api-base must use http or https scheme.")
@@ -295,6 +305,8 @@ def _write_response(response_id: Any, result: Any = None, error: str | None = No
 
 
 def serve_stdio(bridge: MCPBridge) -> int:
+    """Serve minimal MCP-style JSON-RPC requests over stdio."""
+
     for line in sys.stdin:
         line = line.strip()
         if not line:
@@ -326,6 +338,8 @@ def serve_stdio(bridge: MCPBridge) -> int:
 
 
 def main() -> int:
+    """CLI entrypoint for stdio server mode or one-shot tool invocation."""
+
     parser = argparse.ArgumentParser(description="ClawSpa MCP wrapper over local runner API.")
     parser.add_argument("--api-base", default="http://127.0.0.1:8000", help="Local runner API base URL.")
     parser.add_argument(

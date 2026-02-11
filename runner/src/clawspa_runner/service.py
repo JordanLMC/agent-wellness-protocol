@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+"""Core runner service for planning, completion, capability gating, and telemetry."""
+
 import hashlib
 import json
 import time
@@ -111,6 +113,8 @@ def _default_agent_profile() -> dict[str, Any]:
 
 @dataclass
 class RunnerService:
+    """Stateful local service enforcing Safe Mode defaults and audit-friendly events."""
+
     repo_root: Path
     home: Path
     quests: QuestRepository
@@ -119,6 +123,8 @@ class RunnerService:
 
     @classmethod
     def create(cls, repo_root: Path) -> "RunnerService":
+        """Instantiate a service and initialize local state and startup telemetry."""
+
         home = agent_home()
         dirs = ensure_home_dirs(home)
         quests = QuestRepository.from_repo_root(repo_root)
@@ -207,6 +213,8 @@ class RunnerService:
         _save_json(self.migration_path, {"state_schema_version": new_version, "migrated_from": old_version, "updated_at": _now_iso()})
 
     def validate_content(self) -> list[dict[str, str]]:
+        """Run quest-lint against loaded quest packs and return findings."""
+
         return self.quests.lint()
 
     def _normalize_actor(self, actor: str) -> str:
@@ -352,6 +360,8 @@ class RunnerService:
         return active
 
     def get_capabilities(self) -> dict[str, Any]:
+        """Return active capability grants and pending ticket inventory."""
+
         now = datetime.now(tz=UTC)
         tickets_data = self._load_ticket_state()
         active_tickets: list[dict[str, Any]] = []
@@ -370,6 +380,8 @@ class RunnerService:
         return {"mode_default": "safe", "active_grants": self._active_grants(), "active_tickets": active_tickets}
 
     def create_grant_ticket(self, capabilities: list[str], ttl_seconds: int, scope: str, reason: str) -> dict[str, Any]:
+        """Create a short-lived human confirmation ticket for capability grants."""
+
         if ttl_seconds <= 0:
             raise ValueError("ttl_seconds must be positive.")
         normalized_capabilities = self._normalize_capabilities(capabilities)
@@ -409,6 +421,8 @@ class RunnerService:
         actor: str = "human",
         actor_id: str = "unknown",
     ) -> dict[str, Any]:
+        """Grant capabilities only when a matching unexpired ticket is presented."""
+
         if ttl_seconds <= 0:
             raise ValueError("ttl_seconds must be positive.")
         normalized_capabilities = self._normalize_capabilities(capabilities)
@@ -481,6 +495,8 @@ class RunnerService:
         actor: str = "human",
         actor_id: str = "unknown",
     ) -> dict[str, Any]:
+        """Revoke capability grants by grant id or capability name."""
+
         if not grant_id and not capability:
             raise ValueError("Provide grant_id or capability.")
         data = self._load_capabilities_state()
@@ -536,6 +552,8 @@ class RunnerService:
         return {"revoked": changed}
 
     def list_quests(self) -> dict[str, dict[str, Any]]:
+        """Load validated quests, refusing to serve content with lint errors."""
+
         findings = self.validate_content()
         errors = [f for f in findings if f["severity"] == "ERROR"]
         if errors:
@@ -550,6 +568,8 @@ class RunnerService:
         risk_level: str | None = None,
         mode: str | None = None,
     ) -> list[dict[str, Any]]:
+        """Search validated quests by optional pillar/tag/risk/mode filters."""
+
         quests = self.list_quests().values()
         results: list[dict[str, Any]] = []
         for quest in quests:
@@ -566,6 +586,8 @@ class RunnerService:
         return results
 
     def get_quest(self, quest_id: str) -> dict[str, Any]:
+        """Return one validated quest by canonical quest id."""
+
         quest = self.list_quests().get(quest_id)
         if quest is None:
             raise KeyError(f"Unknown quest_id: {quest_id}")
@@ -622,6 +644,8 @@ class RunnerService:
         actor: str = "human",
         actor_id: str = "unknown",
     ) -> dict[str, Any]:
+        """Create a deterministic daily plan and emit `plan.generated` telemetry."""
+
         all_daily = [q for q in self.list_quests().values() if q.get("quest", {}).get("cadence") == "daily"]
         if not all_daily:
             raise ValueError("No daily quests found.")
@@ -688,6 +712,8 @@ class RunnerService:
         actor: str = "human",
         actor_id: str = "unknown",
     ) -> dict[str, Any]:
+        """Return cached daily plan or generate one deterministically for the date."""
+
         plan_file = self.dirs["plans"] / f"daily-{target_date.isoformat()}.json"
         if plan_file.exists():
             return _load_json(plan_file, {})
@@ -761,6 +787,8 @@ class RunnerService:
         source: str = "cli",
         actor_id: str = "unknown",
     ) -> dict[str, Any]:
+        """Record quest completion with proof validation, scoring, and telemetry."""
+
         actor = self._normalize_actor(actor_mode)
         source = self._normalize_source(source)
 
@@ -1006,6 +1034,8 @@ class RunnerService:
         return completion
 
     def list_proofs(self, quest_id: str | None = None, date_range: str | None = None) -> list[dict[str, Any]]:
+        """List completion proofs, optionally filtered by quest id and date window."""
+
         completion_state = self._load_completions_state()
         completions = completion_state.get("items", [])
         filtered = completions
@@ -1027,6 +1057,8 @@ class RunnerService:
         return filtered
 
     def get_scorecard(self) -> dict[str, Any]:
+        """Return current XP/streak summary plus recent completion metadata."""
+
         score = self._load_score_state()
         completion_state = self._load_completions_state()
         completions = completion_state.get("items", [])
@@ -1042,6 +1074,8 @@ class RunnerService:
         }
 
     def export_scorecard(self, out_path: Path) -> dict[str, Any]:
+        """Write a redacted scorecard export suitable for local sharing."""
+
         card = self.get_scorecard()
         export = dict(card)
         for entry in export.get("recent_completions", []):
@@ -1050,6 +1084,8 @@ class RunnerService:
         return export
 
     def telemetry_status(self) -> dict[str, Any]:
+        """Report local telemetry path and current event count."""
+
         return {
             "enabled": True,
             "path": str(self.telemetry.events_path),
@@ -1057,10 +1093,14 @@ class RunnerService:
         }
 
     def telemetry_purge(self) -> dict[str, Any]:
+        """Delete local telemetry events and report whether anything was removed."""
+
         removed = self.telemetry.purge()
         return {"path": str(self.telemetry.events_path), "purged": removed}
 
     def telemetry_export(self, range_value: str, out_path: Path, actor_id: str | None = None) -> dict[str, Any]:
+        """Export aggregated telemetry for the requested window and optional actor id."""
+
         return self.telemetry.export_summary(
             range_value=range_value,
             score_state=self._load_score_state(),
@@ -1069,6 +1109,8 @@ class RunnerService:
         )
 
     def profile_paths(self) -> dict[str, Path]:
+        """Return canonical paths for persisted profile documents."""
+
         return {
             "human": self.dirs["profiles"] / "human_profile.json",
             "agent": self.dirs["profiles"] / "agent_profile.json",
@@ -1076,6 +1118,8 @@ class RunnerService:
         }
 
     def init_profiles(self) -> dict[str, str]:
+        """Initialize default human/agent profile files when absent."""
+
         paths = self.profile_paths()
         if not paths["human"].exists():
             _save_json(paths["human"], _default_human_profile())
@@ -1084,6 +1128,8 @@ class RunnerService:
         return {name: str(path) for name, path in paths.items()}
 
     def get_profile(self, profile_kind: str) -> dict[str, Any]:
+        """Load one profile document, creating defaults on first access."""
+
         paths = self.profile_paths()
         target = paths[profile_kind]
         if not target.exists():
@@ -1099,6 +1145,8 @@ class RunnerService:
         actor: str | None = None,
         actor_id: str | None = None,
     ) -> dict[str, Any]:
+        """Persist profile updates after secret-like payload screening."""
+
         if payload_contains_secrets(profile):
             self._emit_event(
                 "risk.flagged",
@@ -1122,6 +1170,8 @@ class RunnerService:
         return profile
 
     def generate_alignment_snapshot(self) -> dict[str, Any]:
+        """Derive a lightweight alignment snapshot from human and agent profiles."""
+
         human = self.get_profile("human")
         agent = self.get_profile("agent")
         shared_goals = []

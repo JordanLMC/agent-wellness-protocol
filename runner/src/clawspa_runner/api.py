@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+"""HTTP API surface for local-first runner operations."""
+
 from datetime import date
 from typing import Any
 
@@ -10,11 +12,15 @@ from .service import RunnerService
 
 
 class ProofArtifact(BaseModel):
+    """One redacted proof reference submitted for quest completion."""
+
     ref: str = Field(min_length=1, max_length=512)
     summary: str | None = Field(default=None, max_length=280)
 
 
 class ProofRequest(BaseModel):
+    """Payload for `/v1/proofs` with optional actor identity override."""
+
     quest_id: str
     tier: str
     artifacts: list[ProofArtifact] = Field(default_factory=list)
@@ -23,6 +29,8 @@ class ProofRequest(BaseModel):
 
 
 class GrantRequest(BaseModel):
+    """Capability grant request gated by a human-issued ticket token."""
+
     capabilities: list[str] = Field(default_factory=list)
     ttl_seconds: int = 3600
     scope: str = "manual"
@@ -31,12 +39,16 @@ class GrantRequest(BaseModel):
 
 
 class RevokeRequest(BaseModel):
+    """Capability revoke request scoped by grant id or capability name."""
+
     grant_id: str | None = None
     capability: str | None = None
     actor_id: str | None = Field(default=None, max_length=200)
 
 
 def create_app(service: RunnerService) -> FastAPI:
+    """Create API routes backed by `RunnerService` with actor/source attribution."""
+
     app = FastAPI(title="ClawSpa Runner API", version="0.1")
 
     def request_context(
@@ -44,6 +56,8 @@ def create_app(service: RunnerService) -> FastAPI:
         default_actor: str = "human",
         body_actor_id: str | None = None,
     ) -> tuple[str, str, str]:
+        """Resolve normalized `(source, actor_kind, actor_id)` with header precedence."""
+
         source = request.headers.get("x-clawspa-source", "api").strip().lower()
         actor = request.headers.get("x-clawspa-actor", default_actor).strip().lower()
         header_actor_id = (request.headers.get("x-clawspa-actor-id") or "").strip()
@@ -229,4 +243,6 @@ def create_app(service: RunnerService) -> FastAPI:
 
 
 def date_from_str(value: str) -> date:
+    """Parse `YYYY-MM-DD` into a date object."""
+
     return date.fromisoformat(value)
