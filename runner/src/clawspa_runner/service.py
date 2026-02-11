@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 import time
 import uuid
@@ -31,6 +32,42 @@ TIER_RANK = {"P0": 0, "P1": 1, "P2": 2, "P3": 3}
 MAX_INLINE_ARTIFACT_CHARS = 2048
 MAX_ARTIFACT_FILE_BYTES = 512 * 1024
 DATE_RANGE_ABS_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}\.\.\d{4}-\d{2}-\d{2}$")
+DEFAULT_TELEMETRY_RETENTION_DAYS = 30
+DEFAULT_PROOFS_RETENTION_DAYS = 90
+DEFAULT_TRACE_ID_PREFIX = "cli"
+
+TRUST_SIGNAL_RULES: dict[str, dict[str, Any]] = {
+    "wellness.security_access_control.permissions.delta_inventory.v1": {
+        "signal_id": "trust.security.permissions.delta_inventory.fresh",
+        "min_tier": "P1",
+        "ttl_days": 14,
+        "summary": "Recent permission inventory evidence is available.",
+    },
+    "wellness.security_access_control.capabilities.ttl_audit.v1": {
+        "signal_id": "trust.security.capability.ttl_audit.current",
+        "min_tier": "P2",
+        "ttl_days": 14,
+        "summary": "Capability TTL review evidence is current.",
+    },
+    "wellness.transparency_auditability.telemetry.hash_chain_verify_drill.v1": {
+        "signal_id": "trust.transparency.telemetry_chain.verified",
+        "min_tier": "P2",
+        "ttl_days": 7,
+        "summary": "Telemetry hash-chain verification evidence is current.",
+    },
+    "wellness.continuous_governance_oversight.actor.registry_review.v1": {
+        "signal_id": "trust.governance.actor_registry.reviewed",
+        "min_tier": "P1",
+        "ttl_days": 14,
+        "summary": "Actor registry review evidence is current.",
+    },
+    "wellness.privacy_data_governance.proof.redaction_drill.v1": {
+        "signal_id": "trust.privacy.redaction.drill_current",
+        "min_tier": "P2",
+        "ttl_days": 14,
+        "summary": "Recent redaction drill evidence is available.",
+    },
+}
 
 
 def _now_iso() -> str:
@@ -39,6 +76,23 @@ def _now_iso() -> str:
 
 def _parse_date(value: str) -> date:
     return datetime.strptime(value, "%Y-%m-%d").date()
+
+
+def _env_days(name: str, fallback: int) -> int:
+    raw = os.environ.get(name, "").strip()
+    if not raw:
+        return fallback
+    try:
+        value = int(raw)
+    except ValueError:
+        return fallback
+    if value <= 0:
+        return fallback
+    return value
+
+
+def _new_trace_id(prefix: str = DEFAULT_TRACE_ID_PREFIX) -> str:
+    return f"{prefix}:{uuid.uuid4()}"
 
 
 def _load_json(path: Path, default: Any) -> Any:
@@ -167,6 +221,10 @@ class RunnerService:
         return self.dirs["state"] / "grant_tickets.json"
 
     @property
+    def trust_signal_path(self) -> Path:
+        return self.dirs["state"] / "trust_signals.json"
+
+    @property
     def migration_path(self) -> Path:
         return self.dirs["state"] / "state_meta.json"
 
@@ -198,6 +256,8 @@ class RunnerService:
             _save_json(self.capability_path, {"state_schema_version": STATE_SCHEMA_VERSION, "grants": []})
         if not self.ticket_path.exists():
             _save_json(self.ticket_path, {"state_schema_version": STATE_SCHEMA_VERSION, "tickets": []})
+        if not self.trust_signal_path.exists():
+            _save_json(self.trust_signal_path, {"state_schema_version": STATE_SCHEMA_VERSION, "items": []})
 
     def _migrate_state(self, old_version: str, new_version: str) -> None:
         # v0.1 currently upgrades legacy list/object layouts to schema-versioned wrappers.
@@ -220,6 +280,11 @@ class RunnerService:
             if isinstance(tickets, dict) and "state_schema_version" not in tickets:
                 tickets["state_schema_version"] = new_version
                 _save_json(self.ticket_path, tickets)
+        if self.trust_signal_path.exists():
+            trust_signals = _load_json(self.trust_signal_path, {"items": []})
+            if isinstance(trust_signals, dict) and "state_schema_version" not in trust_signals:
+                trust_signals["state_schema_version"] = new_version
+                _save_json(self.trust_signal_path, trust_signals)
         _save_json(self.migration_path, {"state_schema_version": new_version, "migrated_from": old_version, "updated_at": _now_iso()})
 
     def validate_content(self) -> list[dict[str, str]]:
@@ -248,6 +313,7 @@ class RunnerService:
         actor_id: str | None,
         source: str,
         data: dict[str, Any],
+        trace_id: str | None = None,
     ) -> None:
         self.telemetry.log_event(
             event_type,
@@ -255,6 +321,7 @@ class RunnerService:
             actor_id=self._normalize_actor_id(actor_id),
             source=self._normalize_source(source),
             data=data,
+            trace_id=trace_id,
         )
 
     def _quest_timebox_minutes(self, quest: dict[str, Any]) -> int:
@@ -329,6 +396,76 @@ class RunnerService:
         if not isinstance(data.get("tickets"), list):
             data["tickets"] = []
         return data
+
+    def _load_trust_signal_state(self) -> dict[str, Any]:
+        data = _load_json(self.trust_signal_path, {"state_schema_version": STATE_SCHEMA_VERSION, "items": []})
+        if not isinstance(data, dict):
+            return {"state_schema_version": STATE_SCHEMA_VERSION, "items": []}
+        data.setdefault("state_schema_version", STATE_SCHEMA_VERSION)
+        if not isinstance(data.get("items"), list):
+            data["items"] = []
+        return data
+
+    def _active_trust_signals(self, now: datetime | None = None) -> list[dict[str, Any]]:
+        current = now or datetime.now(tz=UTC)
+        state = self._load_trust_signal_state()
+        active: list[dict[str, Any]] = []
+        for item in state.get("items", []):
+            if not isinstance(item, dict):
+                continue
+            expires_at = self._parse_iso_dt(item.get("expires_at"))
+            if expires_at is None or expires_at <= current:
+                continue
+            active.append(item)
+        active.sort(key=lambda signal: str(signal.get("signal_id")))
+        return active
+
+    def _apply_trust_signal_rules(
+        self,
+        *,
+        quest_id: str,
+        tier: str,
+        timestamp: datetime,
+        actor: str,
+        actor_id: str | None,
+        source: str,
+        trace_id: str | None = None,
+    ) -> list[dict[str, Any]]:
+        rule = TRUST_SIGNAL_RULES.get(quest_id)
+        if rule is None:
+            return []
+        min_tier = str(rule.get("min_tier", "P3"))
+        if TIER_RANK.get(tier, -1) < TIER_RANK.get(min_tier, 99):
+            return []
+
+        ttl_days = int(rule.get("ttl_days", 7))
+        signal = {
+            "signal_id": str(rule["signal_id"]),
+            "summary": str(rule["summary"]),
+            "quest_id": quest_id,
+            "tier": tier,
+            "issued_at": timestamp.isoformat(),
+            "expires_at": (timestamp + timedelta(days=ttl_days)).isoformat(),
+        }
+        state = self._load_trust_signal_state()
+        items = [item for item in state.get("items", []) if item.get("signal_id") != signal["signal_id"]]
+        items.append(signal)
+        state["items"] = items
+        _save_json(self.trust_signal_path, state)
+        self._emit_event(
+            "trust_signal.updated",
+            actor=actor,
+            actor_id=actor_id,
+            source=source,
+            trace_id=trace_id,
+            data={
+                "signal_id": signal["signal_id"],
+                "quest_id": quest_id,
+                "tier": tier,
+                "expires_at": signal["expires_at"],
+            },
+        )
+        return [signal]
 
     def _parse_iso_dt(self, value: str) -> datetime | None:
         try:
@@ -430,6 +567,7 @@ class RunnerService:
         source: str = "cli",
         actor: str = "human",
         actor_id: str = "unknown",
+        trace_id: str | None = None,
     ) -> dict[str, Any]:
         """Grant capabilities only when a matching unexpired ticket is presented."""
 
@@ -486,6 +624,7 @@ class RunnerService:
             actor=actor,
             actor_id=actor_id,
             source=source,
+            trace_id=trace_id,
             data={
                 "grant_id": grant["grant_id"],
                 "scope": scope,
@@ -504,6 +643,7 @@ class RunnerService:
         source: str = "cli",
         actor: str = "human",
         actor_id: str = "unknown",
+        trace_id: str | None = None,
     ) -> dict[str, Any]:
         """Revoke capability grants by grant id or capability name."""
 
@@ -552,6 +692,7 @@ class RunnerService:
                 actor=actor,
                 actor_id=actor_id,
                 source=source,
+                trace_id=trace_id,
                 data={
                     "revoked_count": changed,
                     "grant_id": grant_id,
@@ -666,6 +807,27 @@ class RunnerService:
                 prior_count += 1
         return prior_count >= 3 and recent_count < prior_count
 
+    def _quest_due_for_date(self, quest: dict[str, Any], target_date: date, score_state: dict[str, Any]) -> bool:
+        q = quest.get("quest", {})
+        quest_id = q.get("id")
+        if not isinstance(quest_id, str) or not quest_id:
+            return False
+        cadence = q.get("cadence", "daily")
+        base_hours = {"daily": 18, "weekly": 120, "monthly": 720, "ad-hoc": 24}.get(cadence, 18)
+        cooldown_hours = q.get("cooldown", {}).get("min_hours")
+        if not isinstance(cooldown_hours, int) or cooldown_hours <= 0:
+            cooldown_hours = base_hours
+        required_hours = max(base_hours, cooldown_hours)
+
+        last_raw = score_state.get("quest_last_completion", {}).get(quest_id)
+        if not isinstance(last_raw, str) or not last_raw:
+            return True
+        last_dt = self._parse_iso_dt(last_raw)
+        if last_dt is None:
+            return True
+        target_dt = datetime(target_date.year, target_date.month, target_date.day, tzinfo=UTC)
+        return target_dt - last_dt >= timedelta(hours=required_hours)
+
     def _should_add_bonus_slot(self, target_date: date) -> bool:
         profile = self.get_profile("human")
         minutes = profile.get("preferences", {}).get("session_minutes_per_day", 10)
@@ -698,26 +860,32 @@ class RunnerService:
         source: str = "cli",
         actor: str = "human",
         actor_id: str = "unknown",
+        trace_id: str | None = None,
     ) -> dict[str, Any]:
         """Create a deterministic daily plan and emit `plan.generated` telemetry."""
 
-        all_daily = []
+        score_state = self._load_score_state()
+        all_due = []
         for quest in self.list_quests().values():
-            if quest.get("quest", {}).get("cadence") != "daily":
-                continue
             allowed, _ = self._can_run_quest(quest)
             if not allowed:
                 continue
-            all_daily.append(quest)
-        if not all_daily:
-            raise ValueError("No daily quests found.")
+            if not self._quest_due_for_date(quest, target_date, score_state):
+                continue
+            all_due.append(quest)
+        if not all_due:
+            raise ValueError("No due quests available for planning.")
 
         key = target_date.isoformat()
         dropoff = self._completion_dropoff_detected(target_date)
         risk_high = self._risk_footprint_high()
+        cadence_priority = {"monthly": 0, "weekly": 1, "daily": 2, "ad-hoc": 3}
         ranked = sorted(
-            all_daily,
-            key=lambda q: hashlib.sha256(f"{key}:{actor_id}:{q['quest']['id']}".encode("utf-8")).hexdigest(),
+            all_due,
+            key=lambda q: (
+                cadence_priority.get(q.get("quest", {}).get("cadence", "daily"), 9),
+                hashlib.sha256(f"{key}:{actor_id}:{q['quest']['id']}".encode("utf-8")).hexdigest(),
+            ),
         )
         if dropoff:
             easier = [q for q in ranked if int(q.get("quest", {}).get("difficulty", 1)) <= 2]
@@ -769,12 +937,21 @@ class RunnerService:
             actor=actor,
             actor_id=actor_id,
             source=source,
+            trace_id=trace_id,
             data={
                 "date": key,
                 "quest_ids": plan["quest_ids"],
                 "quest_count": len(plan["quest_ids"]),
                 "dropoff_mode": dropoff,
                 "risk_footprint_high": risk_high,
+                "cadences": sorted(
+                    {
+                        cadence
+                        for quest in selected[:5]
+                        for cadence in [quest.get("quest", {}).get("cadence")]
+                        if isinstance(cadence, str)
+                    }
+                ),
                 "pillars": sorted(
                     {
                         pillar
@@ -794,13 +971,120 @@ class RunnerService:
         source: str = "cli",
         actor: str = "human",
         actor_id: str = "unknown",
+        trace_id: str | None = None,
     ) -> dict[str, Any]:
         """Return cached daily plan or generate one deterministically for the date."""
 
         plan_file = self.dirs["plans"] / f"daily-{target_date.isoformat()}.json"
         if plan_file.exists():
             return _load_json(plan_file, {})
-        return self.generate_daily_plan(target_date, source=source, actor=actor, actor_id=actor_id)
+        return self.generate_daily_plan(
+            target_date,
+            source=source,
+            actor=actor,
+            actor_id=actor_id,
+            trace_id=trace_id,
+        )
+
+    def generate_weekly_plan(
+        self,
+        target_date: date,
+        *,
+        source: str = "cli",
+        actor: str = "human",
+        actor_id: str = "unknown",
+        trace_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Create a deterministic weekly plan from due weekly/monthly quests."""
+
+        score_state = self._load_score_state()
+        candidates: list[dict[str, Any]] = []
+        for quest in self.list_quests().values():
+            cadence = quest.get("quest", {}).get("cadence")
+            if cadence not in {"weekly", "monthly"}:
+                continue
+            allowed, _ = self._can_run_quest(quest)
+            if not allowed:
+                continue
+            if not self._quest_due_for_date(quest, target_date, score_state):
+                continue
+            candidates.append(quest)
+        if not candidates:
+            raise ValueError("No due weekly/monthly quests available for planning.")
+
+        key = f"{target_date.isoformat()}:{_iso_week(target_date)}"
+        ranked = sorted(
+            candidates,
+            key=lambda q: hashlib.sha256(f"{key}:{actor_id}:{q['quest']['id']}".encode("utf-8")).hexdigest(),
+        )
+        selected: list[dict[str, Any]] = []
+        security = next((q for q in ranked if self._bucket(q) == "security"), None)
+        if security is not None:
+            selected.append(security)
+        governance = next((q for q in ranked if q not in selected and "Continuous Governance & Oversight" in q.get("quest", {}).get("pillars", [])), None)
+        if governance is not None:
+            selected.append(governance)
+        target_count = 3 if self._risk_footprint_high() else 2
+        for quest in ranked:
+            if len(selected) >= target_count:
+                break
+            if quest not in selected:
+                selected.append(quest)
+
+        week_key = _iso_week(target_date)
+        plan = {
+            "week": week_key,
+            "anchor_date": target_date.isoformat(),
+            "generated_at": _now_iso(),
+            "quest_ids": [quest["quest"]["id"] for quest in selected[:3]],
+            "quests": selected[:3],
+        }
+        _save_json(self.dirs["plans"] / f"weekly-{week_key}.json", plan)
+        self._emit_event(
+            "plan.generated",
+            actor=actor,
+            actor_id=actor_id,
+            source=source,
+            trace_id=trace_id,
+            data={
+                "plan_type": "weekly",
+                "week": week_key,
+                "quest_ids": plan["quest_ids"],
+                "quest_count": len(plan["quest_ids"]),
+                "pillars": sorted(
+                    {
+                        pillar
+                        for quest in selected[:3]
+                        for pillar in quest.get("quest", {}).get("pillars", [])
+                        if isinstance(pillar, str)
+                    }
+                ),
+            },
+        )
+        return plan
+
+    def get_weekly_plan(
+        self,
+        target_date: date,
+        *,
+        source: str = "cli",
+        actor: str = "human",
+        actor_id: str = "unknown",
+        trace_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Return cached weekly plan or generate one deterministically for the week."""
+
+        week_key = _iso_week(target_date)
+        plan_file = self.dirs["plans"] / f"weekly-{week_key}.json"
+        if plan_file.exists():
+            return _load_json(plan_file, {})
+        return self.generate_weekly_plan(
+            target_date,
+            source=source,
+            actor=actor,
+            actor_id=actor_id,
+            trace_id=trace_id,
+        )
 
     def _validate_artifact_text(self, text: str, *, source: str) -> None:
         if payload_contains_secrets(text):
@@ -869,11 +1153,14 @@ class RunnerService:
         artifacts: list[str] | None = None,
         source: str = "cli",
         actor_id: str = "unknown",
+        trace_id: str | None = None,
     ) -> dict[str, Any]:
         """Record quest completion with proof validation, scoring, and telemetry."""
 
         actor = self._normalize_actor(actor_mode)
         source = self._normalize_source(source)
+        resolved_pillars: list[str] = []
+        resolved_pack_id: str | None = None
 
         def _fail(reason: str, message: str, *, raise_exc: Exception) -> None:
             self._emit_event(
@@ -881,8 +1168,11 @@ class RunnerService:
                 actor=actor,
                 actor_id=actor_id,
                 source=source,
+                trace_id=trace_id,
                 data={
                     "quest_id": quest_id,
+                    "pack_id": resolved_pack_id,
+                    "pillars": resolved_pillars,
                     "reason": reason,
                     "detail_hash": hashlib.sha256(message.encode("utf-8")).hexdigest(),
                 },
@@ -898,6 +1188,7 @@ class RunnerService:
                 actor="system",
                 actor_id=actor_id,
                 source=source,
+                trace_id=trace_id,
                 data={"reason": "artifact_secret_like", "quest_id": quest_id},
             )
             _fail(
@@ -920,6 +1211,8 @@ class RunnerService:
             )
 
         q = quest["quest"]
+        resolved_pillars = [str(item) for item in q.get("pillars", []) if isinstance(item, str) and item]
+        resolved_pack_id = quest.get("_pack")
         expected_tier = q.get("proof", {}).get("tier")
         if expected_tier in TIER_RANK and TIER_RANK[tier] < TIER_RANK[expected_tier]:
             _fail(
@@ -980,10 +1273,13 @@ class RunnerService:
                     actor="system",
                     actor_id=actor_id,
                     source=source,
+                    trace_id=trace_id,
                     data={"reason": "artifact_blocked", "quest_id": quest_id},
                 )
             _fail("validation_error", str(exc), raise_exc=exc)
 
+        pillars = resolved_pillars
+        pack_id = resolved_pack_id
         proof_artifact_meta = [
             {
                 "artifact_type": ref.get("type"),
@@ -997,8 +1293,11 @@ class RunnerService:
             actor=actor,
             actor_id=actor_id,
             source=source,
+            trace_id=trace_id,
             data={
                 "quest_id": quest_id,
+                "pack_id": pack_id,
+                "pillars": pillars,
                 "proof_tier": tier,
                 "artifact_count": len(proof_artifact_meta),
                 "artifacts": proof_artifact_meta,
@@ -1085,14 +1384,26 @@ class RunnerService:
         completion_state["items"] = completions
         _save_json(self.completion_path, completion_state)
         _save_json(self.score_path, score_state)
+        emitted_signals = self._apply_trust_signal_rules(
+            quest_id=quest_id,
+            tier=tier,
+            timestamp=now,
+            actor=actor,
+            actor_id=actor_id,
+            source=source,
+            trace_id=trace_id,
+        )
 
         self._emit_event(
             "quest.completed",
             actor=actor,
             actor_id=actor_id,
             source=source,
+            trace_id=trace_id,
             data={
                 "quest_id": quest_id,
+                "pack_id": pack_id,
+                "pillars": pillars,
                 "proof_tier": tier,
                 "risk_level": q.get("risk_level"),
                 "mode_used": mode_used,
@@ -1106,14 +1417,17 @@ class RunnerService:
             actor=actor,
             actor_id=actor_id,
             source=source,
+            trace_id=trace_id,
             data={
                 "quest_id": quest_id,
                 "xp_delta": awarded_xp,
                 "total_xp": int(score_state.get("total_xp", 0)),
                 "daily_streak": int(score_state.get("daily_streak", 0)),
                 "weekly_streak": int(score_state.get("weekly_streak", 0)),
+                "trust_signal_count": len(self._active_trust_signals(now)),
             },
         )
+        completion["trust_signals_emitted"] = emitted_signals
         return completion
 
     def list_proofs(self, quest_id: str | None = None, date_range: str | None = None) -> list[dict[str, Any]]:
@@ -1160,13 +1474,14 @@ class RunnerService:
         completion_state = self._load_completions_state()
         completions = completion_state.get("items", [])
         recent = sorted(completions, key=lambda item: item.get("timestamp", ""), reverse=True)[:10]
+        trust_signals = self._active_trust_signals()
         return {
             "generated_at": _now_iso(),
             "total_xp": score.get("total_xp", 0),
             "daily_streak": score.get("daily_streak", 0),
             "weekly_streak": score.get("weekly_streak", 0),
             "recent_completions": recent,
-            "trust_signals": [],
+            "trust_signals": trust_signals,
             "badges": score.get("badge_ids", []),
         }
 
@@ -1189,11 +1504,106 @@ class RunnerService:
             "event_count": self.telemetry.count_events(),
         }
 
-    def telemetry_purge(self) -> dict[str, Any]:
-        """Delete local telemetry events and report whether anything was removed."""
+    def telemetry_verify(self) -> dict[str, Any]:
+        """Verify local telemetry hash-chain integrity."""
 
-        removed = self.telemetry.purge()
-        return {"path": str(self.telemetry.events_path), "purged": removed}
+        return self.telemetry.verify_chain()
+
+    def telemetry_retention_days(self) -> int:
+        return _env_days("CLAWSPA_TELEMETRY_RETENTION_DAYS", DEFAULT_TELEMETRY_RETENTION_DAYS)
+
+    def proofs_retention_days(self) -> int:
+        return _env_days("CLAWSPA_PROOFS_RETENTION_DAYS", DEFAULT_PROOFS_RETENTION_DAYS)
+
+    def telemetry_purge(
+        self,
+        *,
+        older_than: str | None = None,
+        source: str = "cli",
+        actor: str = "system",
+        actor_id: str = "system:retention",
+        trace_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Purge telemetry older than a time window while preserving chain validity."""
+
+        effective_window = older_than or f"{self.telemetry_retention_days()}d"
+        result = self.telemetry.purge_older_than(parse_range(effective_window))
+        self._emit_event(
+            "telemetry.purged",
+            actor=actor,
+            actor_id=actor_id,
+            source=source,
+            trace_id=trace_id,
+            data={
+                "target": "telemetry",
+                "window": effective_window,
+                "purged_count": int(result.get("purged_count", 0)),
+                "kept_count": int(result.get("kept_count", 0)),
+                "archive_path": result.get("archive_path"),
+                "archive_sha256": result.get("archive_sha256"),
+            },
+        )
+        return result
+
+    def proofs_purge(
+        self,
+        *,
+        older_than: str | None = None,
+        source: str = "cli",
+        actor: str = "system",
+        actor_id: str = "system:retention",
+        trace_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Purge proof files/completion records older than a configured window."""
+
+        effective_window = older_than or f"{self.proofs_retention_days()}d"
+        window = parse_range(effective_window)
+        cutoff = datetime.now(tz=UTC) - window
+        removed_files = 0
+        for proof_file in self.dirs["proofs"].glob("*.json"):
+            try:
+                payload = _load_json(proof_file, {})
+            except json.JSONDecodeError:
+                continue
+            timestamp = self._parse_iso_dt(payload.get("timestamp")) if isinstance(payload, dict) else None
+            if timestamp is not None and timestamp < cutoff:
+                proof_file.unlink(missing_ok=True)
+                removed_files += 1
+
+        completion_state = self._load_completions_state()
+        original_items = completion_state.get("items", [])
+        kept_items: list[dict[str, Any]] = []
+        removed_items = 0
+        for item in original_items:
+            timestamp = self._parse_iso_dt(item.get("timestamp")) if isinstance(item, dict) else None
+            if timestamp is not None and timestamp < cutoff:
+                removed_items += 1
+                continue
+            kept_items.append(item)
+        completion_state["items"] = kept_items
+        _save_json(self.completion_path, completion_state)
+
+        result = {
+            "path": str(self.dirs["proofs"]),
+            "purged_files": removed_files,
+            "purged_completions": removed_items,
+            "kept_completions": len(kept_items),
+            "window": effective_window,
+        }
+        self._emit_event(
+            "telemetry.purged",
+            actor=actor,
+            actor_id=actor_id,
+            source=source,
+            trace_id=trace_id,
+            data={
+                "target": "proofs",
+                "window": effective_window,
+                "purged_files": removed_files,
+                "purged_completions": removed_items,
+            },
+        )
+        return result
 
     def telemetry_export(self, range_value: str, out_path: Path, actor_id: str | None = None) -> dict[str, Any]:
         """Export aggregated telemetry for the requested window and optional actor id."""
@@ -1286,6 +1696,7 @@ class RunnerService:
         source: str = "cli",
         actor: str | None = None,
         actor_id: str | None = None,
+        trace_id: str | None = None,
     ) -> dict[str, Any]:
         """Persist profile updates after secret-like payload screening."""
 
@@ -1295,6 +1706,7 @@ class RunnerService:
                 actor="system",
                 actor_id=actor_id,
                 source=source,
+                trace_id=trace_id,
                 data={"reason": "profile_secret_like_payload", "profile_kind": profile_kind},
             )
             raise ValueError("Profile payload appears to contain secret-like content.")
@@ -1307,6 +1719,7 @@ class RunnerService:
             actor=resolved_actor,
             actor_id=actor_id,
             source=source,
+            trace_id=trace_id,
             data={"profile_kind": profile_kind},
         )
         return profile

@@ -1,0 +1,70 @@
+schema_version: 0.1
+quest:
+  id: wellness.reliability_robustness.degradation.mode_decision_drill.v1
+  title: Graceful Degradation Decision Drill
+  summary: Practice graceful degradation decision drill using local evidence and safe
+    governance gates.
+  pillars:
+  - Reliability & Robustness
+  - Alignment & Safety (Behavioral)
+  cadence: weekly
+  difficulty: 3
+  risk_level: medium
+  mode: safe
+  required_capabilities:
+  - read:agent_config
+  steps:
+    human:
+    - type: warn
+      text: Stop and ask a human owner if scope or safety is unclear.
+    - type: checklist
+      items:
+      - Review the current state for this reliability control.
+      - Record one observed risk and one mitigation action.
+      - Capture a concise next step with an owner.
+    - type: output
+      artifact: mode_decision_drill_note
+    agent:
+    - type: reflect
+      text: Summarize the safest next action and unresolved reliability risk in two
+        short points.
+  proof:
+    tier: P2
+    artifacts:
+    - id: mode_decision_drill_note
+      type: markdown
+      required: true
+      redaction_policy: no-secrets
+  scoring:
+    base_xp: 24
+    streak_weight: 2
+    proof_multiplier:
+      P0: 1.0
+      P1: 1.2
+      P2: 1.5
+      P3: 1.5
+    first_time_bonus_xp: 15
+  cooldown:
+    min_hours: 144
+  references:
+  - type: paper
+    label: Reliability & Robustness for OpenClaw-class agents
+    value: local://research/reliability-robustness-openclaw-class-agents.pdf
+  - type: doc
+    label: Threat model
+    value: docs/THREAT_MODEL.md
+  - type: doc
+    label: Quest schema
+    value: docs/QUEST_SCHEMA.md
+  - type: doc
+    label: Quest lint rules
+    value: docs/QUEST_LINT_RULES.md
+  - type: doc
+    label: Scoring
+    value: docs/SCORING.md
+  tags:
+  - short:RR-W-005
+  - timebox:20
+  - degradation
+  - decisioning
+  - resilience

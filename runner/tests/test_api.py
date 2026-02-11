@@ -41,6 +41,19 @@ def test_daily_plan_endpoint(tmp_path: Path) -> None:
     assert len(payload["quest_ids"]) >= 3
 
 
+def test_weekly_plan_endpoints(tmp_path: Path) -> None:
+    _, client = _service_and_client(tmp_path)
+    read_response = client.get("/v1/plans/weekly", params={"date": "2026-02-11"})
+    assert read_response.status_code == 200
+    read_payload = read_response.json()
+    assert "quest_ids" in read_payload
+    assert len(read_payload["quest_ids"]) >= 1
+
+    generate_response = client.post("/v1/plans/weekly/generate", params={"date": "2026-02-11"})
+    assert generate_response.status_code == 200
+    assert len(generate_response.json()["quest_ids"]) >= 1
+
+
 def test_quests_search_route_not_shadowed(tmp_path: Path) -> None:
     _, client = _service_and_client(tmp_path)
     response = client.get("/v1/quests/search", params={"mode": "safe"})
@@ -338,6 +351,27 @@ def test_mcp_header_sets_event_source(tmp_path: Path) -> None:
     assert plan_events
     assert plan_events[-1]["source"] == "mcp"
     assert plan_events[-1]["actor"] == {"kind": "agent", "id": "openclaw:moltfred"}
+
+
+def test_trace_id_header_echo_and_telemetry_propagation(tmp_path: Path) -> None:
+    _, client = _service_and_client(tmp_path)
+    trace_id = "mcp:test-trace-id"
+    response = client.post(
+        "/v1/plans/daily/generate",
+        params={"date": "2026-02-10"},
+        headers={
+            "X-Clawspa-Source": "mcp",
+            "X-Clawspa-Actor": "agent",
+            "X-Clawspa-Actor-Id": "openclaw:moltfred",
+            "X-Clawspa-Trace-Id": trace_id,
+        },
+    )
+    assert response.status_code == 200
+    assert response.headers.get("x-clawspa-trace-id") == trace_id
+
+    events = _events(tmp_path)
+    plan_events = [event for event in events if event.get("event_type") == "plan.generated"]
+    assert plan_events[-1].get("trace_id") == trace_id
 
 
 def test_actor_id_falls_back_to_source_unknown(tmp_path: Path) -> None:

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import os
-from datetime import date
+from datetime import UTC, date, datetime
 from pathlib import Path
 
 from clawspa_runner.service import RunnerService
@@ -295,3 +295,66 @@ def test_artifact_with_secret_like_content_rejected(tmp_path: Path) -> None:
         assert False, "Expected secret-like artifact rejection"
     except ValueError:
         assert True
+
+
+def test_daily_plan_is_cadence_aware_and_can_include_non_daily(tmp_path: Path) -> None:
+    os.environ["AGENTWELLNESS_HOME"] = str(tmp_path / "home")
+    service = RunnerService.create(_repo_root())
+    plan = service.generate_daily_plan(date(2026, 2, 11))
+    cadences = {quest.get("quest", {}).get("cadence") for quest in plan.get("quests", [])}
+    assert any(cadence in {"weekly", "monthly"} for cadence in cadences)
+
+
+def test_trust_signal_emitted_when_rule_threshold_met(tmp_path: Path) -> None:
+    os.environ["AGENTWELLNESS_HOME"] = str(tmp_path / "home")
+    service = RunnerService.create(_repo_root())
+    result = service.complete_quest(
+        "wellness.security_access_control.permissions.delta_inventory.v1",
+        "P1",
+        "sanitized permission summary",
+        actor_mode="agent",
+        source="mcp",
+        actor_id="openclaw:moltfred",
+    )
+    assert result["trust_signals_emitted"]
+    card = service.get_scorecard()
+    assert any(signal.get("signal_id") == "trust.security.permissions.delta_inventory.fresh" for signal in card["trust_signals"])
+
+
+def test_proofs_purge_removes_old_entries(tmp_path: Path) -> None:
+    os.environ["AGENTWELLNESS_HOME"] = str(tmp_path / "home")
+    service = RunnerService.create(_repo_root())
+    old_completion = {
+        "proof_id": "p-old",
+        "quest_id": "wellness.identity.anchor.mission_statement.v1",
+        "timestamp": "2024-01-01T00:00:00+00:00",
+        "tier": "P0",
+        "xp_awarded": 0,
+        "review_required": False,
+    }
+    recent_completion = {
+        "proof_id": "p-new",
+        "quest_id": "wellness.identity.anchor.mission_statement.v1",
+        "timestamp": datetime.now(tz=UTC).isoformat(),
+        "tier": "P0",
+        "xp_awarded": 0,
+        "review_required": False,
+    }
+    service.completion_path.write_text(
+        json.dumps({"state_schema_version": "0.1", "items": [old_completion, recent_completion]}),
+        encoding="utf-8",
+    )
+
+    old_proof = service.dirs["proofs"] / "p-old.json"
+    old_proof.write_text(json.dumps({"proof_id": "p-old", "timestamp": "2024-01-01T00:00:00+00:00"}), encoding="utf-8")
+    recent_proof = service.dirs["proofs"] / "p-new.json"
+    recent_proof.write_text(
+        json.dumps({"proof_id": "p-new", "timestamp": datetime.now(tz=UTC).isoformat()}),
+        encoding="utf-8",
+    )
+
+    purge = service.proofs_purge(older_than="30d")
+    assert purge["purged_completions"] == 1
+    assert purge["purged_files"] == 1
+    assert old_proof.exists() is False
+    assert recent_proof.exists() is True

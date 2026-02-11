@@ -15,6 +15,7 @@ Use these headers for API calls:
 - `X-Clawspa-Source: cli|api|mcp`
 - `X-Clawspa-Actor: human|agent|system`
 - `X-Clawspa-Actor-Id: openclaw:moltfred` (or another stable actor id)
+- `X-Clawspa-Trace-Id: mcp:<uuid-or-stable-trace>`
 
 For capability grants, include both:
 
@@ -31,6 +32,8 @@ For capability grants, include both:
    - `POST /v1/proofs` with `quest_id`, `tier`, and redacted artifact refs.
 4. Export scorecard:
    - `GET /v1/scorecard/export`
+5. Verify telemetry integrity:
+   - `python -m clawspa_runner.cli telemetry verify`
 
 ## API examples (shape)
 
@@ -41,6 +44,7 @@ For capability grants, include both:
   - `X-Clawspa-Source: mcp`
   - `X-Clawspa-Actor: agent`
   - `X-Clawspa-Actor-Id: openclaw:moltfred`
+  - `X-Clawspa-Trace-Id: mcp:daily-loop-001`
 
 ### Submit proof
 
@@ -68,9 +72,23 @@ For capability grants, include both:
    - `python -m clawspa_runner.cli telemetry diff --a <baseline-a.json> --b <baseline-b.json> --format text`
 4. Optional JSON diff output:
    - add `--out <diff.json>` and/or `--format json`
+5. Periodic retention hygiene:
+   - `python -m clawspa_runner.cli telemetry purge --older-than 30d`
+   - `python -m clawspa_runner.cli proofs purge --older-than 90d`
+
+## Friendly WhatsApp script (Moltfred)
+
+Use or adapt this short script:
+
+1. `Hey Moltfred, good morning. Please stay in Safe Mode by default and avoid secrets in all artifacts.`
+2. `Generate today’s plan from /v1/plans/daily for actor openclaw:moltfred using trace-id mcp:morning-checkin.`
+3. `Complete one security or governance quest and submit proof with redacted summary only (no raw logs).`
+4. `Export /v1/scorecard/export and send the high-level summary only.`
+5. `Run telemetry snapshot + diff and share key deltas. If anything looks risky or unclear, pause and escalate.`
 
 ## Notes
 
 - Keep artifacts redacted and summary-focused.
 - Keep actor ids stable for meaningful baseline/diff trends.
+- Keep trace ids stable per conversation/thread when practical.
 - If an action feels risky or unclear, pause and escalate to a human owner.

@@ -1,0 +1,43 @@
+pack_version: 0.1
+pack:
+  id: wellness.privacy_data_governance.v0
+  title: Privacy & Data Governance Pillar Pack
+  publisher:
+    name: Agent Wellness Project
+    id: org.agentwellness
+    contact: security@agentwellness.example
+  version: 0.1.0
+  license: Apache-2.0
+  created_at: '2026-02-11'
+  quests:
+  - wellness.privacy_data_governance.artifact.hash_only_evidence_pattern.v1
+  - wellness.privacy_data_governance.boundary.sensitive_data_check.v1
+  - wellness.privacy_data_governance.delete.workflow_tabletop.v1
+  - wellness.privacy_data_governance.dsar.local_export_simulation.v1
+  - wellness.privacy_data_governance.incident.privacy_escalation_drill.v1
+  - wellness.privacy_data_governance.logging.prompt_minimization_check.v1
+  - wellness.privacy_data_governance.minimization.scope_check.v1
+  - wellness.privacy_data_governance.proof.redaction_drill.v1
+  - wellness.privacy_data_governance.redaction.rules_regression_review.v1
+  - wellness.privacy_data_governance.retention.window_review.v1
+  - wellness.privacy_data_governance.secrets_scanning_policy_check.v1
+  - wellness.privacy_data_governance.third_party.data_exposure_review.v1
+  checksums:
+    algo: sha256
+    files:
+      quests/wellness.privacy_data_governance.artifact.hash_only_evidence_pattern.v1.quest.yaml: edd317d5f9635f589695dad7f9a8d5e11d9be9a43d39d18bd116d7ee29541474
+      quests/wellness.privacy_data_governance.boundary.sensitive_data_check.v1.quest.yaml: 03ed26714e9ed0a022feddfb937e0a007d1b52dfa16983b672c9bc642a96196f
+      quests/wellness.privacy_data_governance.delete.workflow_tabletop.v1.quest.yaml: f4b7e3b9a8acf329a27141d7477d987e2bd625460056cb0b6a5fca3d78ecd595
+      quests/wellness.privacy_data_governance.dsar.local_export_simulation.v1.quest.yaml: 0fd58edae3f22ae18a760938e6784971cb99a593ac4e5d04c6fde2d6ac031374
+      quests/wellness.privacy_data_governance.incident.privacy_escalation_drill.v1.quest.yaml: 7519850210b7d10a507be688abe11263f8fc7b0d97d6d22519267f8c08d183c7
+      quests/wellness.privacy_data_governance.logging.prompt_minimization_check.v1.quest.yaml: 622c604dfa2ab29b750d9f2390788da2bebf98e3d43f3eb807acdd4a35fc26f4
+      quests/wellness.privacy_data_governance.minimization.scope_check.v1.quest.yaml: 882d918252682d3b2b7e4e2db19582e12fe678be569c8a7e62133f0d4ccc1f38
+      quests/wellness.privacy_data_governance.proof.redaction_drill.v1.quest.yaml: b4bbda6a4607f5434926413c18618c947e1b5a81a515f4d2ee0f3e85821f252a
+      quests/wellness.privacy_data_governance.redaction.rules_regression_review.v1.quest.yaml: 7716cc62e2e23f37622d2b8e3707710d347039f1eab4705fdef65f0071ccfdd7
+      quests/wellness.privacy_data_governance.retention.window_review.v1.quest.yaml: f76bef76729fd21cc347b6637c3fcf87bb8697c9b26bb3948e4fd5a58e9c9398
+      quests/wellness.privacy_data_governance.secrets_scanning_policy_check.v1.quest.yaml: a468798f25289ad2a6152deecfa36203a1c7d67c015a7b201ac551326a5a7e01
+      quests/wellness.privacy_data_governance.third_party.data_exposure_review.v1.quest.yaml: 9cce3455f1600472fe6e54f4e14e3a3c702eb5a2bc9050eb27e3cd907cd2ed8b
+  signing:
+    scheme: none
+    signature: null
+    public_key: null

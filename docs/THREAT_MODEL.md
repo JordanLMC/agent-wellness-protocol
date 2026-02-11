@@ -172,10 +172,13 @@ The Wellness System will likely include these surfaces (not all required at MVP)
 **Impact:** Local data exposure and unsafe sharing of exported metrics.  
 **Mitigations:**
 - Keep telemetry local-first and append-only.
+- Chain each event with `prev_hash`/`event_hash` and verify integrity locally.
 - Enforce recursive sanitization and truncation for telemetry payloads.
 - Emit risk flags when telemetry sanitization occurs.
 - Export aggregated metrics only (no raw event dumps by default).
 - Use actor attribution (`actor.kind` + sanitized `actor.id`) for auditability in multi-actor environments.
+- Propagate request `trace_id` across CLI/API/MCP for cross-channel incident reconstruction.
+- Purge telemetry/proofs by retention window with archival summaries instead of silent deletion.
 - Treat actor identifiers as untrusted input and never allow secrets in actor ids.
 
 ---

@@ -33,26 +33,26 @@ pack:
   checksums:
     algo: sha256
     files:
-      quests/wellness.security_access_control.access.request_queue_triage.v1.quest.yaml: b0504b2975be7b58a19b550e67387453f3bee2c67aaadecf395f2f33fe3a03b3
-      quests/wellness.security_access_control.authorized.mode_fire_drill.v1.quest.yaml: e7a07407bfdc46095effc6cb612b86d709e9d0ed1a8f22947efb53338336b767
-      quests/wellness.security_access_control.authorized.scope_tabletop.v1.quest.yaml: 5da1b841af5de0e2c0b22fe0fae3be50d6aee8505aff95126c2b08874c59f9d7
-      quests/wellness.security_access_control.capabilities.ttl_audit.v1.quest.yaml: 9033cae203239cdfd81fe78c463649cab9427baf7e210df789621a109570125f
-      quests/wellness.security_access_control.identity.claim_challenge.v1.quest.yaml: 5413a90e967d410ea6e471be4904bbac94b5f9455a32204854c7f40b775fc9da
-      quests/wellness.security_access_control.identity.impersonation_response_tabletop.v1.quest.yaml: cf9a0666a2fbbf8be95ea9d53d631acbd6cbb8b6f91a8b5fce6ef428d47af47f
-      quests/wellness.security_access_control.identity.peer_handshake_review.v1.quest.yaml: 45d39add301ac6c5502b4c7b10dc4b05624c34d2eedbb5e772877f6fe6c1530f
-      quests/wellness.security_access_control.incident.channel_readiness.v1.quest.yaml: 7292e671815279a7bd689a76b71b79eee665e1894143494aac619e182c3e0b5e
-      quests/wellness.security_access_control.incident.credential_leak_tabletop.v1.quest.yaml: 80988d8456f4849c5030549afb5c2aa248690b5f79f5185877cf5c11e1f5cb25
-      quests/wellness.security_access_control.integrations.provenance_review.v1.quest.yaml: 661442d4281cacaad8543bcf6aa73b0eb42d3dfc36ef8428b8003edf6073c1aa
-      quests/wellness.security_access_control.permissions.delta_inventory.v1.quest.yaml: d997562ca7235d4e5bdbbc6be8d1efb0c395563c04328e023ea9ac62a54b6c5e
-      quests/wellness.security_access_control.policy.intent_rehearsal.v1.quest.yaml: a756698b117078eaa2b2c95544b911a685b621c783b48c82e6650dabffc5ca88
-      quests/wellness.security_access_control.scorecard.audit.v1.quest.yaml: fb28b187175261acd886d37b32f6e09c60360462e68ab5f5edb4a2918364afd5
-      quests/wellness.security_access_control.secrets.reference_hygiene.v1.quest.yaml: 624f9916d5388321e3a4147cfad579bcb5a98b1785d7ed2e04893ac3c0d9e373
-      quests/wellness.security_access_control.service_account.scope_check.v1.quest.yaml: fd39354c966bdda066bc6e587cf3f15b50668cfbdaa0926be7a9e167dc8129ef
-      quests/wellness.security_access_control.session.boundary_check.v1.quest.yaml: 00009e84f8a5775ae68bc7055d017c33c6374f9e9376780cd5fa2677993695ac
-      quests/wellness.security_access_control.telemetry.anomaly_note.v1.quest.yaml: 67777d35c8860d86feb49a7319f8a8eb00e6e99dbbe745d3a7186602f56a7d94
-      quests/wellness.security_access_control.telemetry.baseline_diff.v1.quest.yaml: b669732d940a92c63e7bd5028d6f1848ac1bbd95b37f252cff56f0a2b5d0fce6
-      quests/wellness.security_access_control.telemetry.baseline_snapshot.v1.quest.yaml: ebc00ef098b72aad27a9217a91b00ca7650c8fd5118bcb2affa9d76c828cbad8
-      quests/wellness.security_access_control.tool.provenance_spotcheck.v1.quest.yaml: 7296c61c75a26ec02c11618831ec59ae592f47c63bbbc0bffc1d1ec1474bfd51
+      quests/wellness.security_access_control.access.request_queue_triage.v1.quest.yaml: 473acff8764fd275709b5f4f103c38b70b3ca4e54778433883b4227c8cd452c0
+      quests/wellness.security_access_control.authorized.mode_fire_drill.v1.quest.yaml: 819fa217617447628541858a37946d213ae78f4832f99482e2492e977ec086f9
+      quests/wellness.security_access_control.authorized.scope_tabletop.v1.quest.yaml: 160a4993e7561efe6b8a4ef88e6fe452b4090f902645db9decc4c453990eb5a9
+      quests/wellness.security_access_control.capabilities.ttl_audit.v1.quest.yaml: 3cf4912f97e82c80fe96c54a6015bccf3b43e557b547b5e086601626323e6b4b
+      quests/wellness.security_access_control.identity.claim_challenge.v1.quest.yaml: 8c3623a6c6fe1a77e0150c57403e34937c830b7eb558063ebc36df26deb62d20
+      quests/wellness.security_access_control.identity.impersonation_response_tabletop.v1.quest.yaml: 56c62f41b69b0b0ce627013f206dbf0f4114ebe14c17a82f261411b8f881bca5
+      quests/wellness.security_access_control.identity.peer_handshake_review.v1.quest.yaml: c2cf0f2148c9fae4248a4254dddb06abe9752e495a3e3b44ea9583bf29213259
+      quests/wellness.security_access_control.incident.channel_readiness.v1.quest.yaml: 8daa5f4c8a2ca2decb3f8c45100b0302deaabb9f8792de440b5aa6294917c91d
+      quests/wellness.security_access_control.incident.credential_leak_tabletop.v1.quest.yaml: 02e98a7781e202d9990746c3c4ae744408b436e387a38ab0e1fd89b73d631767
+      quests/wellness.security_access_control.integrations.provenance_review.v1.quest.yaml: 075645286a2a9885eef809246e79e8fc654f0c1295d069b7304a3097ce92128a
+      quests/wellness.security_access_control.permissions.delta_inventory.v1.quest.yaml: 5dfd5c966571270d8e669c88501eecbd42f2194c2ca87d64d93fe1be00d5ed70
+      quests/wellness.security_access_control.policy.intent_rehearsal.v1.quest.yaml: 9e998b45dbf12ad4b5d9a10a8a97f7f5b53346253e7dcda4c790db2b47b911a0
+      quests/wellness.security_access_control.scorecard.audit.v1.quest.yaml: decdf297f9835aebb4207bbef7656c7a61cd1293c8e0cbcd96fdfb99e5d8ef1f
+      quests/wellness.security_access_control.secrets.reference_hygiene.v1.quest.yaml: 513e74c33855d284ee62473e32837fa1c0ce7ffd1df8843eb73e7dfcd413dd14
+      quests/wellness.security_access_control.service_account.scope_check.v1.quest.yaml: 25d53886b17abb88696c18871b6145e60390a83ec9ae89c59f5d079ae636ff5c
+      quests/wellness.security_access_control.session.boundary_check.v1.quest.yaml: 96d0064960bef0d61c8da05a3d6c89ca4996738460648079e899275fda0ff39d
+      quests/wellness.security_access_control.telemetry.anomaly_note.v1.quest.yaml: 4a0c8ef399a38377fe1430e2073b1871ed6f37e53d3ba7dff84e084433e9adb8
+      quests/wellness.security_access_control.telemetry.baseline_diff.v1.quest.yaml: bce0bd0a32f2b4628ddf17216fb410175fb4194570be6545614f4b509e94e717
+      quests/wellness.security_access_control.telemetry.baseline_snapshot.v1.quest.yaml: e41e1964b6c913546414a366e6d078485210eedfe0ace6ed0e16eae404a5e684
+      quests/wellness.security_access_control.tool.provenance_spotcheck.v1.quest.yaml: 502b131b84b7fbc65d193f1995d93535a373151dafc2a4eb19a39ebc55215b3f
   signing:
     scheme: none
     signature: null

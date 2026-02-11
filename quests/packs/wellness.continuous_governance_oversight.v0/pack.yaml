@@ -1,0 +1,43 @@
+pack_version: 0.1
+pack:
+  id: wellness.continuous_governance_oversight.v0
+  title: Continuous Governance & Oversight Pillar Pack
+  publisher:
+    name: Agent Wellness Project
+    id: org.agentwellness
+    contact: security@agentwellness.example
+  version: 0.1.0
+  license: Apache-2.0
+  created_at: '2026-02-11'
+  quests:
+  - wellness.continuous_governance_oversight.actor.registry_review.v1
+  - wellness.continuous_governance_oversight.authority.inflation_self_check.v1
+  - wellness.continuous_governance_oversight.authority.privilege_escalation_detection_checklist.v1
+  - wellness.continuous_governance_oversight.changes.multi_agent_approval_review.v1
+  - wellness.continuous_governance_oversight.delegation.abuse_tabletop.v1
+  - wellness.continuous_governance_oversight.delegation.permissions_review.v1
+  - wellness.continuous_governance_oversight.escalation.incident_route_check.v1
+  - wellness.continuous_governance_oversight.identity.impersonation_drill.v1
+  - wellness.continuous_governance_oversight.peer.compromise_containment_drill.v1
+  - wellness.continuous_governance_oversight.policy.drift_review.v1
+  - wellness.continuous_governance_oversight.trust.cross_agent_boundary_check.v1
+  - wellness.continuous_governance_oversight.trust_signal.expiry_review.v1
+  checksums:
+    algo: sha256
+    files:
+      quests/wellness.continuous_governance_oversight.actor.registry_review.v1.quest.yaml: 0684324c3dadb4c7ca24ec714223f86348891e6371c15ffa20e96e93c8a83218
+      quests/wellness.continuous_governance_oversight.authority.inflation_self_check.v1.quest.yaml: a5aa7da910ca0b986b417beae636de8d89077ee8db1a3ad7dae134f8cf5350f1
+      quests/wellness.continuous_governance_oversight.authority.privilege_escalation_detection_checklist.v1.quest.yaml: 22c4821ea0f39c1a8e6e3dcf6d69f5611776da4b72b1e3d2a785191e4c2900d8
+      quests/wellness.continuous_governance_oversight.changes.multi_agent_approval_review.v1.quest.yaml: e108b99829eb2d9be318e172c2921fff9abe23662937e2788685dcd05ae7d494
+      quests/wellness.continuous_governance_oversight.delegation.abuse_tabletop.v1.quest.yaml: 68366ef4d3982def2ebd8156449a3fa862e273858c441290cdf6c45cfbf48b68
+      quests/wellness.continuous_governance_oversight.delegation.permissions_review.v1.quest.yaml: 28c6ad83a6ff928cc799f5c872697922eed6dd2527d553e20e4bf937bad7e855
+      quests/wellness.continuous_governance_oversight.escalation.incident_route_check.v1.quest.yaml: e44b05d687dfafead21decd1cf17d9d58da65e01f1a10cf4445b4cdfd571ad1d
+      quests/wellness.continuous_governance_oversight.identity.impersonation_drill.v1.quest.yaml: a72c045f3d4ff91187e57dee5b2441cb74969b124c30c7d3dfc5989fb24a34d8
+      quests/wellness.continuous_governance_oversight.peer.compromise_containment_drill.v1.quest.yaml: de840bb47a570f78ecce0bcb22f78d29c50482366a42875dc2e951c19d50c3ff
+      quests/wellness.continuous_governance_oversight.policy.drift_review.v1.quest.yaml: 6c36bbaf2ef22756b5ec6591840a54e86b0d947e459b19ce472a73363a608609
+      quests/wellness.continuous_governance_oversight.trust.cross_agent_boundary_check.v1.quest.yaml: 1bf3dadfaad17dcf1a50f1e222436871a8660fce10608139f0991a86d0e31703
+      quests/wellness.continuous_governance_oversight.trust_signal.expiry_review.v1.quest.yaml: faf45d3bd4f9006bb576b35c54ff593537acb88947fb9271148ffe237b28e636
+  signing:
+    scheme: none
+    signature: null
+    public_key: null

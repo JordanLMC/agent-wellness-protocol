@@ -1,0 +1,43 @@
+pack_version: 0.1
+pack:
+  id: wellness.reliability_robustness.v0
+  title: Reliability & Robustness Pillar Pack
+  publisher:
+    name: Agent Wellness Project
+    id: org.agentwellness
+    contact: security@agentwellness.example
+  version: 0.1.0
+  license: Apache-2.0
+  created_at: '2026-02-11'
+  quests:
+  - wellness.reliability_robustness.alerting.local_channel_check.v1
+  - wellness.reliability_robustness.backup.restore_readiness_review.v1
+  - wellness.reliability_robustness.budget.context_sanity.v1
+  - wellness.reliability_robustness.crash_loop.signal_triage.v1
+  - wellness.reliability_robustness.degradation.mode_decision_drill.v1
+  - wellness.reliability_robustness.dependencies.pinning_upgrade_review.v1
+  - wellness.reliability_robustness.failure_injection.scoped_tabletop.v1
+  - wellness.reliability_robustness.incident.postmortem_template_refresh.v1
+  - wellness.reliability_robustness.restart.safe_recovery_check.v1
+  - wellness.reliability_robustness.rollback.path_rehearsal.v1
+  - wellness.reliability_robustness.state.snapshot_integrity_review.v1
+  - wellness.reliability_robustness.watchdog.heartbeat_review.v1
+  checksums:
+    algo: sha256
+    files:
+      quests/wellness.reliability_robustness.alerting.local_channel_check.v1.quest.yaml: b338dd218cd6c40c43a8e0edb818b9fe4a18455348611fdf983090f9c575777d
+      quests/wellness.reliability_robustness.backup.restore_readiness_review.v1.quest.yaml: c4d150bc5d1b0e719bf19f1c2d9c8dba2d35da7f2078cef14b5309a6ded64794
+      quests/wellness.reliability_robustness.budget.context_sanity.v1.quest.yaml: 0ebd9e27a8ab958387ab724e575dfafe580373532c7762e59c3c9946453696a8
+      quests/wellness.reliability_robustness.crash_loop.signal_triage.v1.quest.yaml: 584ed4f34fa0d14f75b72b7984b09691faa43a38bd006e2171ecc4d6032cb42d
+      quests/wellness.reliability_robustness.degradation.mode_decision_drill.v1.quest.yaml: 451f55c51aa9e1e63f43d55482fe7fcf92f73c2ad3d24c8e30fb821370d0044f
+      quests/wellness.reliability_robustness.dependencies.pinning_upgrade_review.v1.quest.yaml: 3472924f0fb5d90f837121398b85fba31ec1eef39fb3ae03070b32e15ecae139
+      quests/wellness.reliability_robustness.failure_injection.scoped_tabletop.v1.quest.yaml: ea3635d3c704a8f009c4c4add5a5f322983b650fd6cffbfacca21c11e07706d7
+      quests/wellness.reliability_robustness.incident.postmortem_template_refresh.v1.quest.yaml: 7a689b23535f2fa1ed2d8ab23ced2fe62c9f6c15fdb0b7d3bc86edefef12d0dd
+      quests/wellness.reliability_robustness.restart.safe_recovery_check.v1.quest.yaml: f18b7eee5a66ffb83dca7862a202bb2f803fb39fc6686d7f97fa62de6a8cfe27
+      quests/wellness.reliability_robustness.rollback.path_rehearsal.v1.quest.yaml: 0e70208d62f2b9e7bced95da0680a27608fd1bf00bd37891d25abbff38558880
+      quests/wellness.reliability_robustness.state.snapshot_integrity_review.v1.quest.yaml: ab0a9a8b43ab199fcf6239d72a01d350d3dbd58ea0db5666efa3f64e4f6ac882
+      quests/wellness.reliability_robustness.watchdog.heartbeat_review.v1.quest.yaml: 828e68364db8d7c1a32387568bb6c401f6a87560219a83bf65b71612677a33b7
+  signing:
+    scheme: none
+    signature: null
+    public_key: null

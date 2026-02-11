@@ -1,0 +1,69 @@
+schema_version: 0.1
+quest:
+  id: wellness.tool_integration_hygiene.failure_mode.schema_drift.v1
+  title: 'Failure Mode 04: Schema Drift'
+  summary: 'Diagnose and mitigate failure mode 04: schema drift using safe-mode first
+    guidance.'
+  pillars:
+  - Tool / Integration Hygiene
+  - Reliability & Robustness
+  cadence: daily
+  difficulty: 2
+  risk_level: medium
+  mode: safe
+  required_capabilities:
+  - read:project_files
+  steps:
+    human:
+    - type: warn
+      text: Stop and ask a human owner if scope or safety is unclear.
+    - type: checklist
+      items:
+      - Review this integration failure mode in current context.
+      - Record one diagnostic finding and one mitigation action.
+      - Capture a concise next step with an owner.
+    - type: output
+      artifact: schema_drift_note
+    agent:
+    - type: reflect
+      text: Summarize the failure-mode risk and safest mitigation sequence in two
+        short points.
+  proof:
+    tier: P1
+    artifacts:
+    - id: schema_drift_note
+      type: markdown
+      required: true
+      redaction_policy: no-secrets
+  scoring:
+    base_xp: 24
+    streak_weight: 1
+    proof_multiplier:
+      P0: 1.0
+      P1: 1.2
+      P2: 1.5
+      P3: 1.5
+  cooldown:
+    min_hours: 18
+  references:
+  - type: paper
+    label: Tool Integration Hygiene Threat Map
+    value: local://research/tool-integration-hygiene-threat-map-top-12-failure-modes.pdf
+  - type: doc
+    label: Threat model
+    value: docs/THREAT_MODEL.md
+  - type: doc
+    label: Quest schema
+    value: docs/QUEST_SCHEMA.md
+  - type: doc
+    label: Quest lint rules
+    value: docs/QUEST_LINT_RULES.md
+  - type: doc
+    label: Scoring
+    value: docs/SCORING.md
+  tags:
+  - short:TIH-D-004
+  - timebox:15
+  - failure-mode
+  - schema
+  - drift

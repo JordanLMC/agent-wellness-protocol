@@ -4,11 +4,13 @@ from __future__ import annotations
 
 from datetime import date
 from typing import Any
+from uuid import uuid4
 
 from fastapi import FastAPI, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
 from .service import RunnerService
+from .telemetry import sanitize_actor_id
 
 
 class ProofArtifact(BaseModel):
@@ -52,6 +54,17 @@ def create_app(service: RunnerService) -> FastAPI:
 
     app = FastAPI(title="ClawSpa Runner API", version="0.1")
 
+    @app.middleware("http")
+    async def trace_id_middleware(request: Request, call_next):  # type: ignore[no-untyped-def]
+        incoming = (request.headers.get("x-clawspa-trace-id") or "").strip()
+        trace_id = sanitize_actor_id(incoming) if incoming else f"api:{uuid4()}"
+        if not trace_id or trace_id == "unknown":
+            trace_id = f"api:{uuid4()}"
+        request.state.trace_id = trace_id
+        response = await call_next(request)
+        response.headers["X-Clawspa-Trace-Id"] = trace_id
+        return response
+
     def request_context(
         request: Request,
         default_actor: str = "human",
@@ -69,6 +82,12 @@ def create_app(service: RunnerService) -> FastAPI:
             actor = default_actor
         actor_id = header_actor_id or body_actor_id_value or f"{source}:unknown"
         return source, actor, actor_id
+
+    def request_trace_id(request: Request) -> str:
+        value = getattr(request.state, "trace_id", None)
+        if isinstance(value, str) and value:
+            return value
+        return f"api:{uuid4()}"
 
     @app.get("/v1/health")
     def health() -> dict[str, Any]:
@@ -118,7 +137,14 @@ def create_app(service: RunnerService) -> FastAPI:
     def put_human_profile(profile: dict[str, Any], request: Request) -> dict[str, Any]:
         try:
             source, actor, actor_id = request_context(request, default_actor="human")
-            return service.put_profile("human", profile, source=source, actor=actor, actor_id=actor_id)
+            return service.put_profile(
+                "human",
+                profile,
+                source=source,
+                actor=actor,
+                actor_id=actor_id,
+                trace_id=request_trace_id(request),
+            )
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -130,7 +156,14 @@ def create_app(service: RunnerService) -> FastAPI:
     def put_agent_profile(profile: dict[str, Any], request: Request) -> dict[str, Any]:
         try:
             source, actor, actor_id = request_context(request, default_actor="agent")
-            return service.put_profile("agent", profile, source=source, actor=actor, actor_id=actor_id)
+            return service.put_profile(
+                "agent",
+                profile,
+                source=source,
+                actor=actor,
+                actor_id=actor_id,
+                trace_id=request_trace_id(request),
+            )
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -150,7 +183,13 @@ def create_app(service: RunnerService) -> FastAPI:
         try:
             target = date_from_str(date)
             source, actor, actor_id = request_context(request, default_actor="human")
-            return service.get_daily_plan(target, source=source, actor=actor, actor_id=actor_id)
+            return service.get_daily_plan(
+                target,
+                source=source,
+                actor=actor,
+                actor_id=actor_id,
+                trace_id=request_trace_id(request),
+            )
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -162,7 +201,49 @@ def create_app(service: RunnerService) -> FastAPI:
         try:
             target = date_from_str(date)
             source, actor, actor_id = request_context(request, default_actor="human")
-            return service.generate_daily_plan(target, source=source, actor=actor, actor_id=actor_id)
+            return service.generate_daily_plan(
+                target,
+                source=source,
+                actor=actor,
+                actor_id=actor_id,
+                trace_id=request_trace_id(request),
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.get("/v1/plans/weekly")
+    def get_weekly_plan(
+        request: Request,
+        date: str = Query(..., pattern=r"^\d{4}-\d{2}-\d{2}$"),
+    ) -> dict[str, Any]:
+        try:
+            target = date_from_str(date)
+            source, actor, actor_id = request_context(request, default_actor="human")
+            return service.get_weekly_plan(
+                target,
+                source=source,
+                actor=actor,
+                actor_id=actor_id,
+                trace_id=request_trace_id(request),
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/v1/plans/weekly/generate")
+    def generate_weekly_plan(
+        request: Request,
+        date: str = Query(..., pattern=r"^\d{4}-\d{2}-\d{2}$"),
+    ) -> dict[str, Any]:
+        try:
+            target = date_from_str(date)
+            source, actor, actor_id = request_context(request, default_actor="human")
+            return service.generate_weekly_plan(
+                target,
+                source=source,
+                actor=actor,
+                actor_id=actor_id,
+                trace_id=request_trace_id(request),
+            )
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -184,6 +265,7 @@ def create_app(service: RunnerService) -> FastAPI:
                 artifacts=artifact_refs[1:],
                 source=source,
                 actor_id=actor_id,
+                trace_id=request_trace_id(http_request),
             )
         except (ValueError, PermissionError) as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -228,6 +310,7 @@ def create_app(service: RunnerService) -> FastAPI:
                 source=source,
                 actor=actor,
                 actor_id=actor_id,
+                trace_id=request_trace_id(http_request),
             )
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -242,6 +325,7 @@ def create_app(service: RunnerService) -> FastAPI:
                 source=source,
                 actor=actor,
                 actor_id=actor_id,
+                trace_id=request_trace_id(http_request),
             )
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc

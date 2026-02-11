@@ -5,6 +5,7 @@ ClawSpa is a local-first Agent Wellness System for persistent, identity-bearing,
 ## What this repo contains
 
 - `docs/`: source-of-truth contract docs
+- `research/`: local pillar research reports used to derive quests
 - `quests/`: versioned quest packs + quest-lint tool
 - `runner/`: local runner CLI + localhost API
 - `mcp-server/`: thin MCP wrapper over the local API
@@ -60,8 +61,12 @@ runner capability grant --cap exec:shell --ttl-seconds 300 --scope maintenance -
 
 # telemetry status + export + purge
 runner telemetry status
+runner telemetry verify
 runner telemetry export --range 7d --out ./telemetry-summary.json
-runner telemetry purge
+runner telemetry snapshot --range 7d --actor-id openclaw:moltfred
+runner telemetry diff --a ./baseline-a.json --b ./baseline-b.json --format text
+runner telemetry purge --older-than 30d
+runner proofs purge --older-than 90d
 
 # run MCP stdio wrapper against local API
 clawspa-mcp --api-base http://127.0.0.1:8000
@@ -70,5 +75,6 @@ clawspa-mcp --api-base http://127.0.0.1:8000
 ## Notes
 
 - API endpoints are defined in `docs/API_SURFACE.md` and implemented under `runner/`.
+- Pack inventory and intended use live in `docs/PACKS.md`.
 - Core quest pack v0 lives in `quests/packs/wellness.core.v0/`.
 - Telemetry policy and event model are documented in `docs/TELEMETRY.md`.

@@ -7,6 +7,7 @@ import ipaddress
 import json
 import re
 import sys
+import uuid
 from datetime import date
 from typing import Any
 from urllib.error import HTTPError, URLError
@@ -29,7 +30,7 @@ TOOL_SCHEMAS = [
         "description": "Get daily quest plan for a date (defaults to today).",
         "input_schema": {
             "type": "object",
-            "properties": {"date": {"type": "string"}, "actor_id": {"type": "string"}},
+            "properties": {"date": {"type": "string"}, "actor_id": {"type": "string"}, "trace_id": {"type": "string"}},
             "additionalProperties": False,
         },
     },
@@ -38,7 +39,7 @@ TOOL_SCHEMAS = [
         "description": "Get one quest by canonical quest_id.",
         "input_schema": {
             "type": "object",
-            "properties": {"quest_id": {"type": "string"}, "actor_id": {"type": "string"}},
+            "properties": {"quest_id": {"type": "string"}, "actor_id": {"type": "string"}, "trace_id": {"type": "string"}},
             "required": ["quest_id"],
             "additionalProperties": False,
         },
@@ -61,6 +62,7 @@ TOOL_SCHEMAS = [
                     },
                 },
                 "actor_id": {"type": "string"},
+                "trace_id": {"type": "string"},
             },
             "required": ["quest_id", "tier", "artifacts"],
             "additionalProperties": False,
@@ -69,19 +71,31 @@ TOOL_SCHEMAS = [
     {
         "name": "get_scorecard",
         "description": "Get current local scorecard.",
-        "input_schema": {"type": "object", "properties": {"actor_id": {"type": "string"}}, "additionalProperties": False},
+        "input_schema": {
+            "type": "object",
+            "properties": {"actor_id": {"type": "string"}, "trace_id": {"type": "string"}},
+            "additionalProperties": False,
+        },
     },
     {
         "name": "get_profiles",
         "description": "Get human, agent, and alignment profiles.",
-        "input_schema": {"type": "object", "properties": {"actor_id": {"type": "string"}}, "additionalProperties": False},
+        "input_schema": {
+            "type": "object",
+            "properties": {"actor_id": {"type": "string"}, "trace_id": {"type": "string"}},
+            "additionalProperties": False,
+        },
     },
     {
         "name": "update_agent_profile",
         "description": "Patch and update agent profile fields.",
         "input_schema": {
             "type": "object",
-            "properties": {"profile_patch": {"type": "object"}, "actor_id": {"type": "string"}},
+            "properties": {
+                "profile_patch": {"type": "object"},
+                "actor_id": {"type": "string"},
+                "trace_id": {"type": "string"},
+            },
             "required": ["profile_patch"],
             "additionalProperties": False,
         },
@@ -96,6 +110,9 @@ class MCPBridge:
         self.api_base = validate_api_base(api_base, allow_nonlocal=allow_nonlocal)
         self.actor_id = actor_id
 
+    def _new_trace_id(self) -> str:
+        return f"mcp:{uuid.uuid4()}"
+
     def _request(
         self,
         method: str,
@@ -103,6 +120,7 @@ class MCPBridge:
         params: dict[str, Any] | None = None,
         body: dict[str, Any] | None = None,
         actor_id: str | None = None,
+        trace_id: str | None = None,
     ) -> Any:
         url = f"{self.api_base}{path}"
         if params:
@@ -114,6 +132,7 @@ class MCPBridge:
             "X-Clawspa-Source": "mcp",
             "X-Clawspa-Actor": "agent",
             "X-Clawspa-Actor-Id": effective_actor_id,
+            "X-Clawspa-Trace-Id": trace_id or self._new_trace_id(),
         }
         if body is not None:
             data = json.dumps(body).encode("utf-8")
@@ -130,11 +149,18 @@ class MCPBridge:
     def call_tool(self, name: str, arguments: dict[str, Any]) -> Any:
         validate_tool_arguments(name, arguments)
         actor_id = arguments.get("actor_id") or self.actor_id
+        trace_id = arguments.get("trace_id") or self._new_trace_id()
         if name == "get_daily_quests":
             target = arguments.get("date") or date.today().isoformat()
-            return self._request("GET", "/v1/plans/daily", params={"date": target}, actor_id=actor_id)
+            return self._request(
+                "GET",
+                "/v1/plans/daily",
+                params={"date": target},
+                actor_id=actor_id,
+                trace_id=trace_id,
+            )
         if name == "get_quest":
-            return self._request("GET", f"/v1/quests/{arguments['quest_id']}", actor_id=actor_id)
+            return self._request("GET", f"/v1/quests/{arguments['quest_id']}", actor_id=actor_id, trace_id=trace_id)
         if name == "submit_proof":
             payload = {
                 "quest_id": arguments["quest_id"],
@@ -143,19 +169,24 @@ class MCPBridge:
                 "mode": "agent",
                 "actor_id": actor_id,
             }
-            return self._request("POST", "/v1/proofs", body=payload, actor_id=actor_id)
+            return self._request("POST", "/v1/proofs", body=payload, actor_id=actor_id, trace_id=trace_id)
         if name == "get_scorecard":
-            return self._request("GET", "/v1/scorecard", actor_id=actor_id)
+            return self._request("GET", "/v1/scorecard", actor_id=actor_id, trace_id=trace_id)
         if name == "get_profiles":
             return {
-                "human": self._request("GET", "/v1/profiles/human", actor_id=actor_id),
-                "agent": self._request("GET", "/v1/profiles/agent", actor_id=actor_id),
-                "alignment_snapshot": self._request("GET", "/v1/profiles/alignment_snapshot", actor_id=actor_id),
+                "human": self._request("GET", "/v1/profiles/human", actor_id=actor_id, trace_id=trace_id),
+                "agent": self._request("GET", "/v1/profiles/agent", actor_id=actor_id, trace_id=trace_id),
+                "alignment_snapshot": self._request(
+                    "GET",
+                    "/v1/profiles/alignment_snapshot",
+                    actor_id=actor_id,
+                    trace_id=trace_id,
+                ),
             }
         if name == "update_agent_profile":
-            current = self._request("GET", "/v1/profiles/agent", actor_id=actor_id)
+            current = self._request("GET", "/v1/profiles/agent", actor_id=actor_id, trace_id=trace_id)
             merged = deep_merge(current, arguments.get("profile_patch", {}))
-            return self._request("PUT", "/v1/profiles/agent", body=merged, actor_id=actor_id)
+            return self._request("PUT", "/v1/profiles/agent", body=merged, actor_id=actor_id, trace_id=trace_id)
         raise ValueError(f"Unknown tool: {name}")
 
 
@@ -211,6 +242,11 @@ def validate_tool_arguments(name: str, arguments: dict[str, Any]) -> None:
         if not isinstance(actor_id, str):
             raise ValueError("actor_id must be a string.")
         _validate_safe_text(actor_id, field="actor_id", max_length=200)
+    trace_id = arguments.get("trace_id")
+    if trace_id is not None:
+        if not isinstance(trace_id, str):
+            raise ValueError("trace_id must be a string.")
+        _validate_safe_text(trace_id, field="trace_id", max_length=200)
 
     if name == "get_daily_quests":
         target = arguments.get("date")
@@ -262,7 +298,7 @@ def validate_tool_arguments(name: str, arguments: dict[str, Any]) -> None:
             _validate_safe_text(string_value, field="profile_patch", max_length=MAX_STRING_LENGTH)
         return
     if name in {"get_scorecard", "get_profiles"}:
-        allowed = {"actor_id"}
+        allowed = {"actor_id", "trace_id"}
         if any(key not in allowed for key in arguments):
             raise ValueError(f"{name} does not accept arguments.")
         return
