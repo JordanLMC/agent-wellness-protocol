@@ -93,6 +93,15 @@ def main() -> int:
     telemetry_export.add_argument("--range", default="7d", help="Range window like 7d or 24h")
     telemetry_export.add_argument("--out", required=True, help="Output JSON path")
     telemetry_export.add_argument("--actor-id", default=None, help="Optional actor id filter")
+    telemetry_snapshot = telemetry_sub.add_parser("snapshot", help="Create aggregated telemetry baseline snapshot")
+    telemetry_snapshot.add_argument("--range", default="7d", help="Range window like 7d or 24h")
+    telemetry_snapshot.add_argument("--out", default=None, help="Optional snapshot output path")
+    telemetry_snapshot.add_argument("--actor-id", default=None, help="Optional actor id filter")
+    telemetry_diff = telemetry_sub.add_parser("diff", help="Diff two telemetry baseline/export JSON files")
+    telemetry_diff.add_argument("--a", required=True, help="Path to baseline/export JSON A")
+    telemetry_diff.add_argument("--b", required=True, help="Path to baseline/export JSON B")
+    telemetry_diff.add_argument("--out", default=None, help="Optional output path for JSON diff")
+    telemetry_diff.add_argument("--format", choices=["text", "json"], default="text", help="Console output format")
 
     args = parser.parse_args()
     service = _service()
@@ -181,6 +190,35 @@ def main() -> int:
         if args.telemetry_command == "export":
             summary = service.telemetry_export(args.range, Path(args.out), actor_id=args.actor_id)
             print(json.dumps(summary, indent=2))
+            return 0
+        if args.telemetry_command == "snapshot":
+            snapshot = service.telemetry_snapshot(
+                args.range,
+                actor_id=args.actor_id,
+                out_path=Path(args.out) if args.out else None,
+            )
+            print(
+                json.dumps(
+                    {
+                        "path": snapshot["path"],
+                        "sha256": snapshot["sha256"],
+                    },
+                    indent=2,
+                )
+            )
+            return 0
+        if args.telemetry_command == "diff":
+            diff = service.telemetry_diff(
+                Path(args.a),
+                Path(args.b),
+                out_path=Path(args.out) if args.out else None,
+            )
+            if args.format == "json":
+                print(json.dumps(diff["diff"], indent=2))
+            else:
+                print(diff["text"])
+                if args.out:
+                    print(f"JSON diff written to {args.out}")
             return 0
 
     return 1

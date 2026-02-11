@@ -35,6 +35,7 @@ class GrantRequest(BaseModel):
     ttl_seconds: int = 3600
     scope: str = "manual"
     ticket_token: str = Field(min_length=1)
+    confirm: bool = False
     actor_id: str | None = Field(default=None, max_length=200)
 
 
@@ -62,11 +63,11 @@ def create_app(service: RunnerService) -> FastAPI:
         actor = request.headers.get("x-clawspa-actor", default_actor).strip().lower()
         header_actor_id = (request.headers.get("x-clawspa-actor-id") or "").strip()
         body_actor_id_value = (body_actor_id or "").strip()
-        actor_id = header_actor_id or body_actor_id_value or "unknown"
         if source not in {"cli", "api", "mcp"}:
             source = "api"
         if actor not in {"human", "agent", "system"}:
             actor = default_actor
+        actor_id = header_actor_id or body_actor_id_value or f"{source}:unknown"
         return source, actor, actor_id
 
     @app.get("/v1/health")
@@ -78,8 +79,8 @@ def create_app(service: RunnerService) -> FastAPI:
         return service.quests.list_packs()
 
     @app.post("/v1/packs/sync")
-    def sync_packs() -> dict[str, str]:
-        return {"status": "noop", "message": "v0.1 local packs only"}
+    def sync_packs() -> dict[str, Any]:
+        return service.sync_packs()
 
     @app.get("/v1/packs/{pack_id}")
     def get_pack(pack_id: str) -> dict[str, Any]:
@@ -211,6 +212,12 @@ def create_app(service: RunnerService) -> FastAPI:
 
     @app.post("/v1/capabilities/grant")
     def grant_capabilities(request: GrantRequest, http_request: Request) -> dict[str, Any]:
+        header_confirm = (http_request.headers.get("x-clawspa-confirm") or "").strip().lower() == "true"
+        if not (request.confirm and header_confirm):
+            raise HTTPException(
+                status_code=400,
+                detail="Capability grant requires body confirm=true and header X-Clawspa-Confirm: true.",
+            )
         try:
             source, actor, actor_id = request_context(http_request, default_actor="human", body_actor_id=request.actor_id)
             return service.grant_capabilities_with_ticket(

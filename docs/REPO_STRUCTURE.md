@@ -1,7 +1,7 @@
 # REPO_STRUCTURE.md
 Version: v0.1  
 Status: Draft  
-Last updated: 2026-02-10  
+Last updated: 2026-02-11  
 Owner: Project Team  
 
 ## Purpose
@@ -42,6 +42,10 @@ Define a repo layout that:
         /quests/
           *.quest.yaml
       /wellness.home_security.v0/
+        pack.yaml
+        /quests/
+          *.quest.yaml
+      /wellness.security_access_control.v0/
         pack.yaml
         /quests/
           *.quest.yaml
@@ -166,3 +170,4 @@ Must answer in 60 seconds:
 Optional pack note:
 - `wellness.home_security.v0` is an optional Safe Mode posture pack for home environment checks.
 - It is not part of `CORE_PACK_V0` daily minimum selection logic.
+- `wellness.security_access_control.v0` is a pillar pack focused on access hygiene, identity checks, and safety-gated tabletop drills.

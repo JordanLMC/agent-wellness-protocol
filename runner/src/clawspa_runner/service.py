@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import time
 import uuid
 from dataclasses import dataclass
@@ -14,13 +15,22 @@ from typing import Any
 from .paths import agent_home, ensure_home_dirs
 from .quests import QuestRepository
 from .security import payload_contains_pii, payload_contains_secrets, payload_requests_raw_logs
-from .telemetry import TelemetryLogger, sanitize_actor_id
+from .telemetry import (
+    TelemetryLogger,
+    diff_aggregated_summaries,
+    load_aggregated_summary,
+    parse_range,
+    render_summary_diff_text,
+    sanitize_actor_id,
+    summary_sha256,
+)
 
 
 STATE_SCHEMA_VERSION = "0.1"
 TIER_RANK = {"P0": 0, "P1": 1, "P2": 2, "P3": 3}
 MAX_INLINE_ARTIFACT_CHARS = 2048
 MAX_ARTIFACT_FILE_BYTES = 512 * 1024
+DATE_RANGE_ABS_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}\.\.\d{4}-\d{2}-\d{2}$")
 
 
 def _now_iso() -> str:
@@ -551,6 +561,22 @@ class RunnerService:
             )
         return {"revoked": changed}
 
+    def sync_packs(self) -> dict[str, Any]:
+        """Reload local pack sources and return summary metadata."""
+
+        self.quests = QuestRepository.from_repo_root(self.repo_root)
+        findings = self.validate_content()
+        error_count = sum(1 for item in findings if item.get("severity") == "ERROR")
+        warn_count = sum(1 for item in findings if item.get("severity") == "WARN")
+        packs = self.quests.list_packs()
+        return {
+            "status": "ok" if error_count == 0 else "lint_errors",
+            "sources": self.quests.pack_sources(),
+            "pack_count": len(packs),
+            "error_count": error_count,
+            "warn_count": warn_count,
+        }
+
     def list_quests(self) -> dict[str, dict[str, Any]]:
         """Load validated quests, refusing to serve content with lint errors."""
 
@@ -611,6 +637,35 @@ class RunnerService:
             return "learning"
         return "other"
 
+    def _risk_footprint_high(self) -> bool:
+        for grant in self._active_grants():
+            for capability in grant.get("capabilities", []):
+                if not isinstance(capability, str):
+                    continue
+                if capability.startswith("exec:") or capability.startswith("net:"):
+                    return True
+        return False
+
+    def _completion_dropoff_detected(self, target_date: date) -> bool:
+        completion_state = self._load_completions_state()
+        completions = completion_state.get("items", [])
+        recent_start = target_date - timedelta(days=2)
+        prior_start = target_date - timedelta(days=5)
+        prior_end = target_date - timedelta(days=3)
+
+        recent_count = 0
+        prior_count = 0
+        for item in completions:
+            timestamp = self._parse_iso_dt(item.get("timestamp"))
+            if timestamp is None:
+                continue
+            completed_day = timestamp.date()
+            if recent_start <= completed_day <= target_date:
+                recent_count += 1
+            elif prior_start <= completed_day <= prior_end:
+                prior_count += 1
+        return prior_count >= 3 and recent_count < prior_count
+
     def _should_add_bonus_slot(self, target_date: date) -> bool:
         profile = self.get_profile("human")
         minutes = profile.get("preferences", {}).get("session_minutes_per_day", 10)
@@ -646,15 +701,28 @@ class RunnerService:
     ) -> dict[str, Any]:
         """Create a deterministic daily plan and emit `plan.generated` telemetry."""
 
-        all_daily = [q for q in self.list_quests().values() if q.get("quest", {}).get("cadence") == "daily"]
+        all_daily = []
+        for quest in self.list_quests().values():
+            if quest.get("quest", {}).get("cadence") != "daily":
+                continue
+            allowed, _ = self._can_run_quest(quest)
+            if not allowed:
+                continue
+            all_daily.append(quest)
         if not all_daily:
             raise ValueError("No daily quests found.")
 
         key = target_date.isoformat()
+        dropoff = self._completion_dropoff_detected(target_date)
+        risk_high = self._risk_footprint_high()
         ranked = sorted(
             all_daily,
-            key=lambda q: hashlib.sha256(f"{key}:{q['quest']['id']}".encode("utf-8")).hexdigest(),
+            key=lambda q: hashlib.sha256(f"{key}:{actor_id}:{q['quest']['id']}".encode("utf-8")).hexdigest(),
         )
+        if dropoff:
+            easier = [q for q in ranked if int(q.get("quest", {}).get("difficulty", 1)) <= 2]
+            if easier:
+                ranked = easier
 
         selected: list[dict[str, Any]] = []
         buckets = {"security": None, "memory": None, "purpose": None}
@@ -672,9 +740,22 @@ class RunnerService:
             if quest not in selected:
                 selected.append(quest)
 
-        bonus = self._choose_bonus(ranked, selected, target_date)
-        if bonus is not None and bonus not in selected:
-            selected.append(bonus)
+        if risk_high:
+            for quest in ranked:
+                q = quest.get("quest", {})
+                if quest in selected:
+                    continue
+                if self._bucket(quest) != "security":
+                    continue
+                if q.get("mode") != "safe":
+                    continue
+                selected.append(quest)
+                break
+
+        if len(selected) < 5:
+            bonus = self._choose_bonus(ranked, selected, target_date)
+            if bonus is not None and bonus not in selected:
+                selected.append(bonus)
 
         plan = {
             "date": key,
@@ -692,6 +773,8 @@ class RunnerService:
                 "date": key,
                 "quest_ids": plan["quest_ids"],
                 "quest_count": len(plan["quest_ids"]),
+                "dropoff_mode": dropoff,
+                "risk_footprint_high": risk_high,
                 "pillars": sorted(
                     {
                         pillar
@@ -1042,16 +1125,30 @@ class RunnerService:
         if quest_id:
             filtered = [item for item in filtered if item.get("quest_id") == quest_id]
         if date_range:
-            parts = [item.strip() for item in date_range.split(",")]
-            if len(parts) == 2:
-                start = _parse_date(parts[0])
-                end = _parse_date(parts[1])
-                narrowed: list[dict[str, Any]] = []
+            range_text = date_range.strip()
+            narrowed: list[dict[str, Any]] = []
+            if DATE_RANGE_ABS_PATTERN.match(range_text):
+                start_raw, end_raw = range_text.split("..", 1)
+                start = _parse_date(start_raw)
+                end = _parse_date(end_raw)
+                if start > end:
+                    raise ValueError("date_range start must be <= end.")
                 for item in filtered:
                     timestamp = self._parse_iso_dt(item.get("timestamp"))
                     if timestamp is None:
                         continue
                     if start <= timestamp.date() <= end:
+                        narrowed.append(item)
+                filtered = narrowed
+            else:
+                window = parse_range(range_text)
+                now = datetime.now(tz=UTC)
+                start_dt = now - window
+                for item in filtered:
+                    timestamp = self._parse_iso_dt(item.get("timestamp"))
+                    if timestamp is None:
+                        continue
+                    if timestamp >= start_dt:
                         narrowed.append(item)
                 filtered = narrowed
         return filtered
@@ -1107,6 +1204,51 @@ class RunnerService:
             out_path=out_path,
             actor_id=actor_id,
         )
+
+    def telemetry_snapshot(
+        self,
+        range_value: str,
+        *,
+        actor_id: str | None = None,
+        out_path: Path | None = None,
+    ) -> dict[str, Any]:
+        """Write a baseline snapshot from aggregated telemetry and return its checksum."""
+
+        if out_path is None:
+            baselines_dir = self.home / "baselines"
+            baselines_dir.mkdir(parents=True, exist_ok=True)
+            actor_slug = sanitize_actor_id(actor_id).replace(":", "_") if actor_id is not None else "all"
+            stamp = datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%SZ")
+            out_path = baselines_dir / f"telemetry-baseline-{actor_slug}-{range_value}-{stamp}.json"
+
+        summary = self.telemetry.export_summary(
+            range_value=range_value,
+            score_state=self._load_score_state(),
+            out_path=out_path,
+            actor_id=actor_id,
+        )
+        return {
+            "path": str(out_path),
+            "sha256": summary_sha256(summary),
+            "summary": summary,
+        }
+
+    def telemetry_diff(
+        self,
+        baseline_a: Path,
+        baseline_b: Path,
+        *,
+        out_path: Path | None = None,
+    ) -> dict[str, Any]:
+        """Diff two aggregated telemetry summaries and optionally persist the JSON diff."""
+
+        summary_a = load_aggregated_summary(baseline_a)
+        summary_b = load_aggregated_summary(baseline_b)
+        diff_payload = diff_aggregated_summaries(summary_a, summary_b)
+        if out_path is not None:
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+            _save_json(out_path, diff_payload)
+        return {"diff": diff_payload, "text": render_summary_diff_text(diff_payload)}
 
     def profile_paths(self) -> dict[str, Path]:
         """Return canonical paths for persisted profile documents."""

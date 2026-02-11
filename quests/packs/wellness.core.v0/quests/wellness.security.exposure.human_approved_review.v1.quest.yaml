@@ -44,10 +44,11 @@ quest:
       P0: 1.0
       P1: 1.2
       P2: 1.5
-      P3: 1.4
+      P3: 1.5
   cooldown:
     min_hours: 168
   tags:
   - short:SEC-WEEKLY-003
   - timebox:30
   - authorized
+

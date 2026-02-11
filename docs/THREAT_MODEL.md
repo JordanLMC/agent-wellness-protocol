@@ -1,7 +1,7 @@
 # THREAT_MODEL.md
 Version: v0.1  
 Status: Draft  
-Last updated: 2026-02-10  
+Last updated: 2026-02-11  
 Owner: Project Team  
 
 ## Purpose
@@ -109,6 +109,7 @@ The Wellness System will likely include these surfaces (not all required at MVP)
 - “No blind execution” rule: quest steps cannot include runnable commands without human review gates.
 - Built-in detectors: flag high-risk patterns (e.g., `curl|sh`, `chmod +x`, base64 decode, PowerShell download).
 - Safe Mode only by default; Authorized Mode requires explicit gating and capability grant.
+- Authorized Mode API grants require dual confirmation (`confirm: true` + `X-Clawspa-Confirm: true`) plus a short-lived grant ticket.
 
 ### 2) Prompt injection via Wellness content
 **Attack:** A prompt embedded in quest text hijacks agent behavior (“ignore previous instructions”).  
@@ -200,6 +201,7 @@ The Wellness System will likely include these surfaces (not all required at MVP)
 
 If we only ship the MVP:
 - Quest packs live in GitHub with immutable version tags.
+- Runner loads packs from local directories only by default (no remote URL sync without explicit future design work).
 - Pack manifest includes publisher, checksum, and signing placeholder (even if signature verification is v0.2).
 - Runner enforces Safe Mode by default.
 - Proof export is local-only by default with redaction.

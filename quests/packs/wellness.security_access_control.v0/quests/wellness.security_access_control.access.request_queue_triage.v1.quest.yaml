@@ -1,0 +1,63 @@
+schema_version: 0.1
+quest:
+  id: wellness.security_access_control.access.request_queue_triage.v1
+  title: Access Request Queue Triage
+  summary: 'Access Request Queue Triage: Sort requests into approve-ready, clarify,
+    or deny-ready.'
+  pillars:
+  - Security & Access Control
+  - User Experience & Trust Calibration
+  cadence: daily
+  difficulty: 2
+  risk_level: medium
+  mode: safe
+  required_capabilities:
+  - read:agent_config
+  steps:
+    human:
+    - type: warn
+      text: Stop and ask a human owner if scope or intent is unclear.
+    - type: checklist
+      items:
+      - Sort requests into approve-ready, clarify, or deny-ready.
+      - Add expected expiry for temporary grants.
+      - Capture one request that needs extra context.
+    - type: output
+      artifact: access_queue_summary
+    agent:
+    - type: reflect
+      text: Summarize the safest next actions and unresolved risks in concise language.
+  proof:
+    tier: P1
+    artifacts:
+    - id: access_queue_summary
+      type: markdown
+      required: true
+      redaction_policy: no-secrets
+  scoring:
+    base_xp: 22
+    streak_weight: 1
+    proof_multiplier:
+      P0: 1.0
+      P1: 1.2
+      P2: 1.5
+      P3: 1.5
+  cooldown:
+    min_hours: 18
+  references:
+  - type: paper
+    label: Security & Access Control pillar
+    value: local://research/Security & Access Control pillar.pdf
+  - type: doc
+    label: Threat model
+    value: docs/THREAT_MODEL.md
+  - type: doc
+    label: Quest schema
+    value: docs/QUEST_SCHEMA.md
+  - type: doc
+    label: Quest lint rules
+    value: docs/QUEST_LINT_RULES.md
+  tags:
+  - short:SECAC-D-003
+  - timebox:10
+  - security-access-control

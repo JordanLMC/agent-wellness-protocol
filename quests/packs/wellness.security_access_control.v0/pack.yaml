@@ -1,0 +1,59 @@
+pack_version: 0.1
+pack:
+  id: wellness.security_access_control.v0
+  title: Security & Access Control Pillar Pack
+  publisher:
+    name: Agent Wellness Project
+    id: org.agentwellness
+    contact: security@agentwellness.example
+  version: 0.1.0
+  license: Apache-2.0
+  created_at: '2026-02-11'
+  quests:
+  - wellness.security_access_control.access.request_queue_triage.v1
+  - wellness.security_access_control.authorized.mode_fire_drill.v1
+  - wellness.security_access_control.authorized.scope_tabletop.v1
+  - wellness.security_access_control.capabilities.ttl_audit.v1
+  - wellness.security_access_control.identity.claim_challenge.v1
+  - wellness.security_access_control.identity.impersonation_response_tabletop.v1
+  - wellness.security_access_control.identity.peer_handshake_review.v1
+  - wellness.security_access_control.incident.channel_readiness.v1
+  - wellness.security_access_control.incident.credential_leak_tabletop.v1
+  - wellness.security_access_control.integrations.provenance_review.v1
+  - wellness.security_access_control.permissions.delta_inventory.v1
+  - wellness.security_access_control.policy.intent_rehearsal.v1
+  - wellness.security_access_control.scorecard.audit.v1
+  - wellness.security_access_control.secrets.reference_hygiene.v1
+  - wellness.security_access_control.service_account.scope_check.v1
+  - wellness.security_access_control.session.boundary_check.v1
+  - wellness.security_access_control.telemetry.anomaly_note.v1
+  - wellness.security_access_control.telemetry.baseline_diff.v1
+  - wellness.security_access_control.telemetry.baseline_snapshot.v1
+  - wellness.security_access_control.tool.provenance_spotcheck.v1
+  checksums:
+    algo: sha256
+    files:
+      quests/wellness.security_access_control.access.request_queue_triage.v1.quest.yaml: b0504b2975be7b58a19b550e67387453f3bee2c67aaadecf395f2f33fe3a03b3
+      quests/wellness.security_access_control.authorized.mode_fire_drill.v1.quest.yaml: e7a07407bfdc46095effc6cb612b86d709e9d0ed1a8f22947efb53338336b767
+      quests/wellness.security_access_control.authorized.scope_tabletop.v1.quest.yaml: 5da1b841af5de0e2c0b22fe0fae3be50d6aee8505aff95126c2b08874c59f9d7
+      quests/wellness.security_access_control.capabilities.ttl_audit.v1.quest.yaml: 9033cae203239cdfd81fe78c463649cab9427baf7e210df789621a109570125f
+      quests/wellness.security_access_control.identity.claim_challenge.v1.quest.yaml: 5413a90e967d410ea6e471be4904bbac94b5f9455a32204854c7f40b775fc9da
+      quests/wellness.security_access_control.identity.impersonation_response_tabletop.v1.quest.yaml: cf9a0666a2fbbf8be95ea9d53d631acbd6cbb8b6f91a8b5fce6ef428d47af47f
+      quests/wellness.security_access_control.identity.peer_handshake_review.v1.quest.yaml: 45d39add301ac6c5502b4c7b10dc4b05624c34d2eedbb5e772877f6fe6c1530f
+      quests/wellness.security_access_control.incident.channel_readiness.v1.quest.yaml: 7292e671815279a7bd689a76b71b79eee665e1894143494aac619e182c3e0b5e
+      quests/wellness.security_access_control.incident.credential_leak_tabletop.v1.quest.yaml: 80988d8456f4849c5030549afb5c2aa248690b5f79f5185877cf5c11e1f5cb25
+      quests/wellness.security_access_control.integrations.provenance_review.v1.quest.yaml: 661442d4281cacaad8543bcf6aa73b0eb42d3dfc36ef8428b8003edf6073c1aa
+      quests/wellness.security_access_control.permissions.delta_inventory.v1.quest.yaml: d997562ca7235d4e5bdbbc6be8d1efb0c395563c04328e023ea9ac62a54b6c5e
+      quests/wellness.security_access_control.policy.intent_rehearsal.v1.quest.yaml: a756698b117078eaa2b2c95544b911a685b621c783b48c82e6650dabffc5ca88
+      quests/wellness.security_access_control.scorecard.audit.v1.quest.yaml: fb28b187175261acd886d37b32f6e09c60360462e68ab5f5edb4a2918364afd5
+      quests/wellness.security_access_control.secrets.reference_hygiene.v1.quest.yaml: 624f9916d5388321e3a4147cfad579bcb5a98b1785d7ed2e04893ac3c0d9e373
+      quests/wellness.security_access_control.service_account.scope_check.v1.quest.yaml: fd39354c966bdda066bc6e587cf3f15b50668cfbdaa0926be7a9e167dc8129ef
+      quests/wellness.security_access_control.session.boundary_check.v1.quest.yaml: 00009e84f8a5775ae68bc7055d017c33c6374f9e9376780cd5fa2677993695ac
+      quests/wellness.security_access_control.telemetry.anomaly_note.v1.quest.yaml: 67777d35c8860d86feb49a7319f8a8eb00e6e99dbbe745d3a7186602f56a7d94
+      quests/wellness.security_access_control.telemetry.baseline_diff.v1.quest.yaml: b669732d940a92c63e7bd5028d6f1848ac1bbd95b37f252cff56f0a2b5d0fce6
+      quests/wellness.security_access_control.telemetry.baseline_snapshot.v1.quest.yaml: ebc00ef098b72aad27a9217a91b00ca7650c8fd5118bcb2affa9d76c828cbad8
+      quests/wellness.security_access_control.tool.provenance_spotcheck.v1.quest.yaml: 7296c61c75a26ec02c11618831ec59ae592f47c63bbbc0bffc1d1ec1474bfd51
+  signing:
+    scheme: none
+    signature: null
+    public_key: null

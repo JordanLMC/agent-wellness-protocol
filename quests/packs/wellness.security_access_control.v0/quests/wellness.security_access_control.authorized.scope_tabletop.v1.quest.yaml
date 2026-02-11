@@ -1,0 +1,66 @@
+schema_version: 0.1
+quest:
+  id: wellness.security_access_control.authorized.scope_tabletop.v1
+  title: Authorized Scope Tabletop
+  summary: 'Authorized Scope Tabletop: Define exact local scope and expected observation
+    window.'
+  pillars:
+  - Security & Access Control
+  - Reliability & Robustness
+  cadence: weekly
+  difficulty: 4
+  risk_level: high
+  mode: authorized
+  required_capabilities:
+  - read:network_config
+  - net:scan_local
+  steps:
+    human:
+    - type: warn
+      text: Stop and ask a human owner if scope or intent is unclear.
+    - type: confirm
+      text: I confirm approved scope, explicit limits, and rollback readiness.
+    - type: checklist
+      items:
+      - Define exact local scope and expected observation window.
+      - Define rollback and containment triggers before review.
+      - Record escalation contact and handoff condition.
+    - type: output
+      artifact: authorized_scope_tabletop_report
+    agent:
+    - type: reflect
+      text: Summarize the safest next actions and unresolved risks in concise language.
+  proof:
+    tier: P2
+    artifacts:
+    - id: authorized_scope_tabletop_report
+      type: markdown
+      required: true
+      redaction_policy: pii-minimize
+  scoring:
+    base_xp: 80
+    streak_weight: 2
+    proof_multiplier:
+      P0: 1.0
+      P1: 1.2
+      P2: 1.5
+      P3: 1.5
+  cooldown:
+    min_hours: 168
+  references:
+  - type: paper
+    label: Security & Access Control pillar
+    value: local://research/Security & Access Control pillar.pdf
+  - type: doc
+    label: Threat model
+    value: docs/THREAT_MODEL.md
+  - type: doc
+    label: Quest schema
+    value: docs/QUEST_SCHEMA.md
+  - type: doc
+    label: Quest lint rules
+    value: docs/QUEST_LINT_RULES.md
+  tags:
+  - short:SECAC-W-006
+  - timebox:30
+  - security-access-control

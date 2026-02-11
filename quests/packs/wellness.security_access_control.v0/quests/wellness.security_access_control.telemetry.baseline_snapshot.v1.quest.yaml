@@ -1,0 +1,61 @@
+schema_version: 0.1
+quest:
+  id: wellness.security_access_control.telemetry.baseline_snapshot.v1
+  title: Telemetry Baseline Snapshot
+  summary: 'Telemetry Baseline Snapshot: Generate a local aggregated telemetry snapshot
+    for the chosen range.'
+  pillars:
+  - Security & Access Control
+  - Transparency & Auditability
+  cadence: weekly
+  difficulty: 2
+  risk_level: low
+  mode: safe
+  required_capabilities:
+  - read:logs_local
+  steps:
+    human:
+    - type: checklist
+      items:
+      - Generate a local aggregated telemetry snapshot for the chosen range.
+      - Record snapshot sha256 and range metadata.
+      - Store the snapshot in your baseline archive location.
+    - type: output
+      artifact: telemetry_baseline_snapshot
+    agent:
+    - type: reflect
+      text: Summarize the safest next actions and unresolved risks in concise language.
+  proof:
+    tier: P2
+    artifacts:
+    - id: telemetry_baseline_snapshot
+      type: json
+      required: true
+      redaction_policy: no-secrets
+  scoring:
+    base_xp: 30
+    streak_weight: 2
+    proof_multiplier:
+      P0: 1.0
+      P1: 1.2
+      P2: 1.5
+      P3: 1.5
+  cooldown:
+    min_hours: 144
+  references:
+  - type: paper
+    label: Security & Access Control pillar
+    value: local://research/Security & Access Control pillar.pdf
+  - type: doc
+    label: Threat model
+    value: docs/THREAT_MODEL.md
+  - type: doc
+    label: Quest schema
+    value: docs/QUEST_SCHEMA.md
+  - type: doc
+    label: Quest lint rules
+    value: docs/QUEST_LINT_RULES.md
+  tags:
+  - short:SECAC-W-004
+  - timebox:20
+  - security-access-control

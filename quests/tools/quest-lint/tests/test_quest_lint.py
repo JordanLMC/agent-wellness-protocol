@@ -136,7 +136,7 @@ quest:
   scoring:
     base_xp: 40
     streak_weight: 1
-    proof_multiplier: {P0: 1.0, P1: 1.2, P2: 1.5, P3: 1.4}
+    proof_multiplier: {P0: 1.0, P1: 1.2, P2: 1.5, P3: 1.5}
   tags: ["short:SEC-WEEKLY-003", "timebox:20"]
 """
 
@@ -247,6 +247,13 @@ def test_checksum_mismatch_fails(tmp_path: Path) -> None:
     assert "PACK-004" in _rules(findings)
 
 
+def test_non_monotonic_proof_multiplier_fails(tmp_path: Path) -> None:
+    bad = PASS_QUEST_1.replace("proof_multiplier: {P0: 1.0, P1: 1.1, P2: 1.2, P3: 1.3}", "proof_multiplier: {P0: 1.0, P1: 1.2, P2: 1.5, P3: 1.4}")
+    pack = _mk_pack(tmp_path, {"wellness.bad.proof_multiplier.v1.quest.yaml": bad})
+    findings = lint_path(pack, docs_dir=DOCS_DIR)
+    assert "PROOF-003" in _rules(findings)
+
+
 def test_hidden_unicode_in_quest_fails(tmp_path: Path) -> None:
     bad = PASS_QUEST_1.replace("Permission Inventory", "Permission \u202EInventory")
     pack = _mk_pack(tmp_path, {"wellness.bad.bidi.v1.quest.yaml": bad})
@@ -316,3 +323,30 @@ def test_home_security_pack_proof_multiplier_is_monotonic() -> None:
         multipliers = quest_data["quest"]["scoring"]["proof_multiplier"]
         values = [float(multipliers[tier]) for tier in ("P0", "P1", "P2", "P3")]
         assert values == sorted(values), f"proof_multiplier is not monotonic in {file_path.name}: {values}"
+
+
+def test_security_access_control_pack_manifest_and_checksums_pass() -> None:
+    pack_dir = REPO_ROOT / "quests" / "packs" / "wellness.security_access_control.v0"
+    findings = lint_path(pack_dir, docs_dir=DOCS_DIR)
+    assert findings == []
+
+    manifest = yaml.safe_load((pack_dir / "pack.yaml").read_text(encoding="utf-8"))
+    quest_files = sorted((pack_dir / "quests").glob("*.quest.yaml"))
+    quest_ids = []
+    high_risk_with_confirm = 0
+    for file_path in quest_files:
+        quest_data = yaml.safe_load(file_path.read_text(encoding="utf-8"))
+        quest = quest_data["quest"]
+        quest_ids.append(quest["id"])
+        multipliers = quest["scoring"]["proof_multiplier"]
+        values = [float(multipliers[tier]) for tier in ("P0", "P1", "P2", "P3")]
+        assert values == sorted(values), f"proof_multiplier is not monotonic in {file_path.name}: {values}"
+        if quest.get("risk_level") in {"high", "critical"}:
+            human_steps = quest.get("steps", {}).get("human", [])
+            assert any(step.get("type") == "confirm" for step in human_steps)
+            high_risk_with_confirm += 1
+
+    assert len(quest_files) == 20
+    assert sorted(manifest["pack"]["quests"]) == sorted(quest_ids)
+    assert len(set(quest_ids)) == len(quest_ids)
+    assert high_risk_with_confirm >= 1

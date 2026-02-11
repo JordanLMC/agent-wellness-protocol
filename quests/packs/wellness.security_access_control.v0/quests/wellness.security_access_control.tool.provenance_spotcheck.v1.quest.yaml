@@ -1,0 +1,62 @@
+schema_version: 0.1
+quest:
+  id: wellness.security_access_control.tool.provenance_spotcheck.v1
+  title: Tool Provenance Spot Check
+  summary: 'Tool Provenance Spot Check: Pick one installed tool or skill.'
+  pillars:
+  - Security & Access Control
+  - Tool / Integration Hygiene
+  cadence: daily
+  difficulty: 2
+  risk_level: medium
+  mode: safe
+  required_capabilities:
+  - read:installed_skills
+  steps:
+    human:
+    - type: warn
+      text: Stop and ask a human owner if scope or intent is unclear.
+    - type: checklist
+      items:
+      - Pick one installed tool or skill.
+      - Record publisher, version, and update recency.
+      - Mark trust status as trusted, restricted, or remove-candidate.
+    - type: output
+      artifact: provenance_spotcheck_note
+    agent:
+    - type: reflect
+      text: Summarize the safest next actions and unresolved risks in concise language.
+  proof:
+    tier: P1
+    artifacts:
+    - id: provenance_spotcheck_note
+      type: markdown
+      required: true
+      redaction_policy: no-secrets
+  scoring:
+    base_xp: 24
+    streak_weight: 1
+    proof_multiplier:
+      P0: 1.0
+      P1: 1.2
+      P2: 1.5
+      P3: 1.5
+  cooldown:
+    min_hours: 18
+  references:
+  - type: paper
+    label: Security & Access Control pillar
+    value: local://research/Security & Access Control pillar.pdf
+  - type: doc
+    label: Threat model
+    value: docs/THREAT_MODEL.md
+  - type: doc
+    label: Quest schema
+    value: docs/QUEST_SCHEMA.md
+  - type: doc
+    label: Quest lint rules
+    value: docs/QUEST_LINT_RULES.md
+  tags:
+  - short:SECAC-D-006
+  - timebox:10
+  - security-access-control

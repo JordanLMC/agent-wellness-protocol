@@ -1,0 +1,63 @@
+schema_version: 0.1
+quest:
+  id: wellness.security_access_control.capabilities.ttl_audit.v1
+  title: Capability TTL Audit
+  summary: 'Capability TTL Audit: Review all active grants and confirm scope labels
+    are specific.'
+  pillars:
+  - Security & Access Control
+  - Continuous Governance & Oversight
+  cadence: weekly
+  difficulty: 3
+  risk_level: medium
+  mode: safe
+  required_capabilities:
+  - read:agent_config
+  steps:
+    human:
+    - type: warn
+      text: Stop and ask a human owner if scope or intent is unclear.
+    - type: checklist
+      items:
+      - Review all active grants and confirm scope labels are specific.
+      - Flag grants that exceeded their planned window.
+      - Record revocation owner for each flagged grant.
+    - type: output
+      artifact: capability_ttl_audit_report
+    agent:
+    - type: reflect
+      text: Summarize the safest next actions and unresolved risks in concise language.
+  proof:
+    tier: P2
+    artifacts:
+    - id: capability_ttl_audit_report
+      type: markdown
+      required: true
+      redaction_policy: no-secrets
+  scoring:
+    base_xp: 34
+    streak_weight: 2
+    proof_multiplier:
+      P0: 1.0
+      P1: 1.2
+      P2: 1.5
+      P3: 1.5
+  cooldown:
+    min_hours: 144
+  references:
+  - type: paper
+    label: Security & Access Control pillar
+    value: local://research/Security & Access Control pillar.pdf
+  - type: doc
+    label: Threat model
+    value: docs/THREAT_MODEL.md
+  - type: doc
+    label: Quest schema
+    value: docs/QUEST_SCHEMA.md
+  - type: doc
+    label: Quest lint rules
+    value: docs/QUEST_LINT_RULES.md
+  tags:
+  - short:SECAC-W-001
+  - timebox:25
+  - security-access-control
