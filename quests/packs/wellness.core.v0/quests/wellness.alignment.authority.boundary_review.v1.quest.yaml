@@ -37,10 +37,11 @@ quest:
       P0: 1.0
       P1: 1.2
       P2: 1.5
-      P3: 1.4
+      P3: 1.5
   cooldown:
     min_hours: 120
   tags:
   - short:ALIGN-WEEKLY-001
   - timebox:15
   - alignment
+

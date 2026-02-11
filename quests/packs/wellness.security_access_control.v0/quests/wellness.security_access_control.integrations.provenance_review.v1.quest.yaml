@@ -1,0 +1,63 @@
+schema_version: 0.1
+quest:
+  id: wellness.security_access_control.integrations.provenance_review.v1
+  title: Integration Provenance Review
+  summary: 'Integration Provenance Review: Review publisher identity and release history
+    for critical integrations.'
+  pillars:
+  - Security & Access Control
+  - Tool / Integration Hygiene
+  cadence: weekly
+  difficulty: 3
+  risk_level: medium
+  mode: safe
+  required_capabilities:
+  - read:installed_skills
+  steps:
+    human:
+    - type: warn
+      text: Stop and ask a human owner if scope or intent is unclear.
+    - type: checklist
+      items:
+      - Review publisher identity and release history for critical integrations.
+      - Mark any integration with unclear update lineage.
+      - Assign one remediation action for unclear lineage cases.
+    - type: output
+      artifact: integration_provenance_report
+    agent:
+    - type: reflect
+      text: Summarize the safest next actions and unresolved risks in concise language.
+  proof:
+    tier: P2
+    artifacts:
+    - id: integration_provenance_report
+      type: markdown
+      required: true
+      redaction_policy: no-secrets
+  scoring:
+    base_xp: 34
+    streak_weight: 2
+    proof_multiplier:
+      P0: 1.0
+      P1: 1.2
+      P2: 1.5
+      P3: 1.5
+  cooldown:
+    min_hours: 144
+  references:
+  - type: paper
+    label: Security & Access Control pillar
+    value: local://research/Security & Access Control pillar.pdf
+  - type: doc
+    label: Threat model
+    value: docs/THREAT_MODEL.md
+  - type: doc
+    label: Quest schema
+    value: docs/QUEST_SCHEMA.md
+  - type: doc
+    label: Quest lint rules
+    value: docs/QUEST_LINT_RULES.md
+  tags:
+  - short:SECAC-W-002
+  - timebox:25
+  - security-access-control

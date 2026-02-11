@@ -123,6 +123,10 @@ Example:
 **PROOF-002 (ERROR) — P2/P3 artifacts require redaction policy**
 - Any artifact that could contain sensitive content must specify `redaction_policy`.
 
+**PROOF-003 (ERROR) — Proof multipliers must be complete and monotonic**
+- `quest.scoring.proof_multiplier` must include numeric entries for `P0`, `P1`, `P2`, and `P3`.
+- Multipliers must be non-decreasing: `P0 <= P1 <= P2 <= P3`.
+
 **DATA-001 (ERROR) — No secrets requested**
 - Quest text must not ask for secrets to be pasted. Flag phrases like:
   - “paste your API key/token/private key/seed phrase”

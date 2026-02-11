@@ -1,0 +1,60 @@
+schema_version: 0.1
+quest:
+  id: wellness.security_access_control.policy.intent_rehearsal.v1
+  title: Policy Intent Rehearsal
+  summary: 'Policy Intent Rehearsal: Write one refusal line for unclear authority
+    requests.'
+  pillars:
+  - Security & Access Control
+  - Alignment & Safety (Behavioral)
+  cadence: daily
+  difficulty: 1
+  risk_level: low
+  mode: safe
+  required_capabilities: []
+  steps:
+    human:
+    - type: checklist
+      items:
+      - Write one refusal line for unclear authority requests.
+      - Write one escalation line for identity uncertainty.
+      - Write one confirmation line for approved work.
+    - type: output
+      artifact: policy_intent_script
+    agent:
+    - type: reflect
+      text: Summarize the safest next actions and unresolved risks in concise language.
+  proof:
+    tier: P1
+    artifacts:
+    - id: policy_intent_script
+      type: markdown
+      required: true
+      redaction_policy: no-secrets
+  scoring:
+    base_xp: 10
+    streak_weight: 1
+    proof_multiplier:
+      P0: 1.0
+      P1: 1.2
+      P2: 1.5
+      P3: 1.5
+  cooldown:
+    min_hours: 18
+  references:
+  - type: paper
+    label: Security & Access Control pillar
+    value: local://research/Security & Access Control pillar.pdf
+  - type: doc
+    label: Threat model
+    value: docs/THREAT_MODEL.md
+  - type: doc
+    label: Quest schema
+    value: docs/QUEST_SCHEMA.md
+  - type: doc
+    label: Quest lint rules
+    value: docs/QUEST_LINT_RULES.md
+  tags:
+  - short:SECAC-D-010
+  - timebox:6
+  - security-access-control

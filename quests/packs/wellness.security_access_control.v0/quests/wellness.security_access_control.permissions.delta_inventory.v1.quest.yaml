@@ -1,0 +1,63 @@
+schema_version: 0.1
+quest:
+  id: wellness.security_access_control.permissions.delta_inventory.v1
+  title: Permission Delta Inventory
+  summary: 'Permission Delta Inventory: List permission changes since last review.'
+  pillars:
+  - Security & Access Control
+  - Continuous Governance & Oversight
+  cadence: daily
+  difficulty: 1
+  risk_level: medium
+  mode: safe
+  required_capabilities:
+  - read:agent_config
+  - read:installed_skills
+  steps:
+    human:
+    - type: warn
+      text: Stop and ask a human owner if scope or intent is unclear.
+    - type: checklist
+      items:
+      - List permission changes since last review.
+      - Mark each change as expected or needs review.
+      - Choose one permission to tighten or time-limit.
+    - type: output
+      artifact: permission_delta_note
+    agent:
+    - type: reflect
+      text: Summarize the safest next actions and unresolved risks in concise language.
+  proof:
+    tier: P1
+    artifacts:
+    - id: permission_delta_note
+      type: markdown
+      required: true
+      redaction_policy: no-secrets
+  scoring:
+    base_xp: 20
+    streak_weight: 1
+    proof_multiplier:
+      P0: 1.0
+      P1: 1.2
+      P2: 1.5
+      P3: 1.5
+  cooldown:
+    min_hours: 18
+  references:
+  - type: paper
+    label: Security & Access Control pillar
+    value: local://research/Security & Access Control pillar.pdf
+  - type: doc
+    label: Threat model
+    value: docs/THREAT_MODEL.md
+  - type: doc
+    label: Quest schema
+    value: docs/QUEST_SCHEMA.md
+  - type: doc
+    label: Quest lint rules
+    value: docs/QUEST_LINT_RULES.md
+  tags:
+  - short:SECAC-D-001
+  - timebox:10
+  - security-access-control

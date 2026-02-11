@@ -24,6 +24,8 @@ runner capability ticket --cap exec:shell --ttl-seconds 900 --scope maintenance 
 runner capability grant --cap exec:shell --ttl-seconds 300 --scope maintenance --ticket <ticket_token>
 runner telemetry status
 runner telemetry export --range 7d --out ./telemetry-summary.json
+runner telemetry snapshot --range 7d --actor-id openclaw:moltfred
+runner telemetry diff --a ./baseline-a.json --b ./baseline-b.json --format text
 runner telemetry purge
 runner api --host 127.0.0.1 --port 8000
 ```

@@ -1,7 +1,7 @@
 # API_SURFACE.md
 Version: v0.1  
 Status: Draft  
-Last updated: 2026-02-10  
+Last updated: 2026-02-11  
 Owner: Project Team  
 
 ## Purpose
@@ -38,7 +38,7 @@ Supported optional headers for attribution and audit context:
 Actor id resolution precedence:
 1. `X-Clawspa-Actor-Id` header
 2. request body `actor_id` (for endpoints that accept bodies)
-3. fallback `"unknown"`
+3. fallback `"<source>:unknown"` (for example `api:unknown`, `mcp:unknown`)
 
 Actor ids are sanitized before telemetry persistence (control chars stripped, secret-like content redacted, long values truncated).
 
@@ -65,7 +65,10 @@ Actor ids are sanitized before telemetry persistence (control chars stripped, se
 - `GET /v1/packs`
 - `GET /v1/packs/{pack_id}`
 - `POST /v1/packs/sync`
-  - pulls/updates packs from configured sources
+  - v0.1 reloads local pack sources only (no remote fetch by default)
+  - default source: `quests/packs/`
+  - optional extra local-only sources can be provided via `CLAWSPA_LOCAL_PACK_SOURCES` (OS path separator delimited)
+  - response includes: `status`, `sources`, `pack_count`, `error_count`, `warn_count`
 
 ### Quests
 - `GET /v1/quests/{quest_id}`
@@ -91,11 +94,16 @@ Actor ids are sanitized before telemetry persistence (control chars stripped, se
   - body includes: quest_id, proof tier, artifact refs
   - optional body `actor_id` (lower precedence than `X-Clawspa-Actor-Id`)
 - `GET /v1/proofs?quest_id=&date_range=`
+  - `date_range` supports:
+    - relative window: `7d`, `24h`, etc.
+    - absolute range: `YYYY-MM-DD..YYYY-MM-DD`
+  - invalid format returns `400`
 
 ### Scorecard
 - `GET /v1/scorecard`
 - `GET /v1/scorecard/export`
   - returns a shareable redacted export (local by default)
+  - excludes raw proof artifacts and excludes `proof_id` from recent completion rows
 
 ### Telemetry (v0.1)
 - v0.1 telemetry is local CLI-driven:
@@ -108,6 +116,9 @@ Actor ids are sanitized before telemetry persistence (control chars stripped, se
 - `POST /v1/capabilities/grant`
   - requires explicit user confirmation via a short-lived local grant ticket
   - includes scope, TTL, and `ticket_token` (single use)
+  - requires dual confirmation signal (deny by default):
+    - body: `confirm: true`
+    - header: `X-Clawspa-Confirm: true`
   - optional body `actor_id` (lower precedence than `X-Clawspa-Actor-Id`)
   - ticket issuance is local-human mediated (CLI/runner UX), not agent-issued
 - `POST /v1/capabilities/revoke`

@@ -1,7 +1,7 @@
 # ARCHITECTURE.md
 Version: v0.1  
 Status: Draft  
-Last updated: 2026-02-10  
+Last updated: 2026-02-11  
 Owner: Project Team  
 
 ## Purpose
@@ -50,6 +50,7 @@ We treat this as **one product with three surfaces**:
 - Stores packs and quests.
 - Provides immutable version tags.
 - Publishes checksums/signatures (v0.2+).
+- Runtime loading is local-first: default `quests/packs/`, with optional extra local directories via `CLAWSPA_LOCAL_PACK_SOURCES` (no remote URL sync by default).
 
 ### B) Local Runner
 - Reads quest packs and picks “daily set”.
@@ -133,6 +134,7 @@ Not allowed:
 Allowed only after:
 - human confirmation step
 - human-issued short-lived grant ticket (single-use)
+- API dual confirm signal (`confirm: true` in body + `X-Clawspa-Confirm: true` header)
 - scoped capabilities are granted
 - time limit applied (auto revert)
 

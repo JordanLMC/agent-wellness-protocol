@@ -1,7 +1,7 @@
 # TELEMETRY.md
 Version: v0.1
 Status: Draft
-Last updated: 2026-02-10
+Last updated: 2026-02-11
 Owner: Project Team
 
 ## Purpose
@@ -35,7 +35,7 @@ Every event includes:
   - `risk.flagged`
 - `actor`
   - `kind`: `human | agent | system`
-  - `id`: optional-at-source but persisted with fallback `"unknown"` (for example `openclaw:moltfred`, `human:jordan`)
+  - `id`: optional-at-source but persisted with fallback `"<source>:unknown"` (for example `openclaw:moltfred`, `human:jordan`, `mcp:unknown`)
 - `source`: `cli | api | mcp`
 - `build`
   - `runner_version`
@@ -79,6 +79,12 @@ runner telemetry export --range 7d --out ./telemetry-summary.json
 # export metrics for a specific actor id only
 runner telemetry export --range 1d --actor-id openclaw:moltfred --out ./moltfred-summary.json
 
+# create a baseline snapshot (writes JSON and returns sha256)
+runner telemetry snapshot --range 7d --actor-id openclaw:moltfred
+
+# diff two aggregated baseline/export files
+runner telemetry diff --a ./baseline-a.json --b ./baseline-b.json --format text
+
 # purge local telemetry events
 runner telemetry purge
 ```
@@ -110,3 +116,18 @@ Range format:
 - `observed_duration_sum`
 
 No raw events are included in export.
+
+## Baseline and diff outputs
+
+- `runner telemetry snapshot` writes an aggregated summary JSON and reports deterministic SHA-256 for that summary payload.
+- Default snapshot location (when `--out` is omitted): `~/.agentwellness/baselines/`.
+- `runner telemetry diff` accepts two aggregated summaries and computes safe deltas for:
+  - `completions_total`
+  - `total_xp`
+  - `daily_streak`
+  - `weekly_streak`
+  - `risk_flags_count`
+  - `quest_success_rate`
+  - `completions_by_actor_id`
+  - `top_quests_completed`
+- Diff operates only on aggregated JSON inputs; raw telemetry event files are not required.

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 """Telemetry event sanitization, persistence, and local summary export helpers."""
 
+import hashlib
 import json
 import platform
 import re
@@ -479,6 +480,143 @@ class TelemetryLogger:
 def hashlib_sha256_hex(value: str) -> str:
     """Return SHA-256 hex digest for sensitive identifier hashing."""
 
-    import hashlib
-
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
+def summary_sha256(summary: dict[str, Any]) -> str:
+    """Compute deterministic SHA-256 for an aggregated telemetry summary."""
+
+    return hashlib_sha256_hex(_safe_json(summary))
+
+
+def load_aggregated_summary(path: Path) -> dict[str, Any]:
+    """Load and validate an aggregated telemetry summary JSON document."""
+
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError(f"Invalid telemetry summary file: {path}") from exc
+    if not isinstance(payload, dict):
+        raise ValueError(f"Telemetry summary must be a JSON object: {path}")
+
+    required = {
+        "schema_version",
+        "generated_at",
+        "range",
+        "events_considered",
+        "completions_total",
+        "total_xp",
+        "daily_streak",
+        "weekly_streak",
+        "risk_flags_count",
+        "quest_success_rate",
+        "completions_by_actor_id",
+        "top_quests_completed",
+    }
+    missing = [key for key in sorted(required) if key not in payload]
+    if missing:
+        raise ValueError(f"Telemetry summary missing required keys: {', '.join(missing)}")
+    if payload.get("schema_version") != SCHEMA_VERSION:
+        raise ValueError(
+            f"Unsupported telemetry summary schema_version: {payload.get('schema_version')}; expected {SCHEMA_VERSION}."
+        )
+    return payload
+
+
+def diff_aggregated_summaries(a: dict[str, Any], b: dict[str, Any]) -> dict[str, Any]:
+    """Produce a safe baseline diff from two aggregated telemetry summaries."""
+
+    def _delta_int(field: str) -> int:
+        return int(b.get(field, 0)) - int(a.get(field, 0))
+
+    def _delta_float(field: str, ndigits: int = 4) -> float:
+        return round(float(b.get(field, 0.0)) - float(a.get(field, 0.0)), ndigits)
+
+    def _counter_delta(field: str) -> dict[str, int]:
+        left = a.get(field, {})
+        right = b.get(field, {})
+        if not isinstance(left, dict):
+            left = {}
+        if not isinstance(right, dict):
+            right = {}
+        keys = sorted(set(left) | set(right))
+        return {str(key): int(right.get(key, 0)) - int(left.get(key, 0)) for key in keys}
+
+    def _top_quest_delta() -> list[dict[str, Any]]:
+        def _to_counter(node: Any) -> dict[str, int]:
+            if not isinstance(node, list):
+                return {}
+            counter: dict[str, int] = {}
+            for item in node:
+                if not isinstance(item, dict):
+                    continue
+                quest_id = item.get("quest_id")
+                count = item.get("count", 0)
+                if isinstance(quest_id, str):
+                    counter[quest_id] = int(count)
+            return counter
+
+        before = _to_counter(a.get("top_quests_completed"))
+        after = _to_counter(b.get("top_quests_completed"))
+        keys = sorted(set(before) | set(after))
+        rows = []
+        for quest_id in keys:
+            rows.append(
+                {
+                    "quest_id": quest_id,
+                    "before": before.get(quest_id, 0),
+                    "after": after.get(quest_id, 0),
+                    "delta": after.get(quest_id, 0) - before.get(quest_id, 0),
+                }
+            )
+        rows.sort(key=lambda item: (-abs(int(item["delta"])), item["quest_id"]))
+        return rows
+
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "baseline_a_generated_at": a.get("generated_at"),
+        "baseline_b_generated_at": b.get("generated_at"),
+        "baseline_a_range": a.get("range"),
+        "baseline_b_range": b.get("range"),
+        "changes": {
+            "events_considered_delta": _delta_int("events_considered"),
+            "completions_total_delta": _delta_int("completions_total"),
+            "total_xp_delta": _delta_int("total_xp"),
+            "daily_streak_delta": _delta_int("daily_streak"),
+            "weekly_streak_delta": _delta_int("weekly_streak"),
+            "risk_flags_count_delta": _delta_int("risk_flags_count"),
+            "quest_success_rate_delta": _delta_float("quest_success_rate"),
+            "completions_by_actor_id_delta": _counter_delta("completions_by_actor_id"),
+            "top_quests_completed_delta": _top_quest_delta(),
+        },
+    }
+
+
+def render_summary_diff_text(diff_payload: dict[str, Any]) -> str:
+    """Render a compact human-readable summary diff."""
+
+    changes = diff_payload.get("changes", {})
+    top_deltas = changes.get("top_quests_completed_delta", [])
+    if not isinstance(top_deltas, list):
+        top_deltas = []
+
+    lines = [
+        f"Baseline A: {diff_payload.get('baseline_a_generated_at')} ({diff_payload.get('baseline_a_range')})",
+        f"Baseline B: {diff_payload.get('baseline_b_generated_at')} ({diff_payload.get('baseline_b_range')})",
+        f"Completions delta: {changes.get('completions_total_delta', 0)}",
+        f"Total XP delta: {changes.get('total_xp_delta', 0)}",
+        f"Daily streak delta: {changes.get('daily_streak_delta', 0)}",
+        f"Weekly streak delta: {changes.get('weekly_streak_delta', 0)}",
+        f"Risk flags delta: {changes.get('risk_flags_count_delta', 0)}",
+        f"Quest success rate delta: {changes.get('quest_success_rate_delta', 0.0)}",
+    ]
+    if top_deltas:
+        lines.append("Top quest deltas:")
+        for row in top_deltas[:5]:
+            if not isinstance(row, dict):
+                continue
+            lines.append(
+                f"- {row.get('quest_id')}: {row.get('before', 0)} -> {row.get('after', 0)} "
+                f"(delta {row.get('delta', 0)})"
+            )
+    return "\n".join(lines)

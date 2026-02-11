@@ -1,0 +1,66 @@
+schema_version: 0.1
+quest:
+  id: wellness.security_access_control.identity.impersonation_response_tabletop.v1
+  title: Impersonation Response Tabletop
+  summary: 'Impersonation Response Tabletop: Map first-response actions for suspected
+    impersonation events.'
+  pillars:
+  - Security & Access Control
+  - Identity & Authenticity
+  cadence: monthly
+  difficulty: 5
+  risk_level: high
+  mode: authorized
+  required_capabilities:
+  - read:logs_local
+  - id:sign_attestation
+  steps:
+    human:
+    - type: warn
+      text: Stop and ask a human owner if scope or intent is unclear.
+    - type: confirm
+      text: I confirm approved scope, explicit limits, and rollback readiness.
+    - type: checklist
+      items:
+      - Map first-response actions for suspected impersonation events.
+      - Define attestation verification and revocation path.
+      - Record escalation order for cross-agent identity disputes.
+    - type: output
+      artifact: impersonation_tabletop_report
+    agent:
+    - type: reflect
+      text: Summarize the safest next actions and unresolved risks in concise language.
+  proof:
+    tier: P3
+    artifacts:
+    - id: impersonation_tabletop_report
+      type: markdown
+      required: true
+      redaction_policy: pii-minimize
+  scoring:
+    base_xp: 100
+    streak_weight: 3
+    proof_multiplier:
+      P0: 1.0
+      P1: 1.2
+      P2: 1.5
+      P3: 1.5
+  cooldown:
+    min_hours: 720
+  references:
+  - type: paper
+    label: Security & Access Control pillar
+    value: local://research/Security & Access Control pillar.pdf
+  - type: doc
+    label: Threat model
+    value: docs/THREAT_MODEL.md
+  - type: doc
+    label: Quest schema
+    value: docs/QUEST_SCHEMA.md
+  - type: doc
+    label: Quest lint rules
+    value: docs/QUEST_LINT_RULES.md
+  tags:
+  - short:SECAC-M-002
+  - timebox:75
+  - security-access-control

@@ -1,0 +1,63 @@
+schema_version: 0.1
+quest:
+  id: wellness.security_access_control.scorecard.audit.v1
+  title: Access Control Scorecard Audit
+  summary: 'Access Control Scorecard Audit: Aggregate monthly completion and risk-flag
+    metrics.'
+  pillars:
+  - Security & Access Control
+  - Transparency & Auditability
+  cadence: monthly
+  difficulty: 4
+  risk_level: medium
+  mode: safe
+  required_capabilities:
+  - read:logs_local
+  steps:
+    human:
+    - type: warn
+      text: Stop and ask a human owner if scope or intent is unclear.
+    - type: checklist
+      items:
+      - Aggregate monthly completion and risk-flag metrics.
+      - Compare against prior baseline diff outcomes.
+      - Record top improvements and top gaps.
+    - type: output
+      artifact: access_control_scorecard
+    agent:
+    - type: reflect
+      text: Summarize the safest next actions and unresolved risks in concise language.
+  proof:
+    tier: P2
+    artifacts:
+    - id: access_control_scorecard
+      type: json
+      required: true
+      redaction_policy: no-secrets
+  scoring:
+    base_xp: 65
+    streak_weight: 3
+    proof_multiplier:
+      P0: 1.0
+      P1: 1.2
+      P2: 1.5
+      P3: 1.5
+  cooldown:
+    min_hours: 720
+  references:
+  - type: paper
+    label: Security & Access Control pillar
+    value: local://research/Security & Access Control pillar.pdf
+  - type: doc
+    label: Threat model
+    value: docs/THREAT_MODEL.md
+  - type: doc
+    label: Quest schema
+    value: docs/QUEST_SCHEMA.md
+  - type: doc
+    label: Quest lint rules
+    value: docs/QUEST_LINT_RULES.md
+  tags:
+  - short:SECAC-M-004
+  - timebox:60
+  - security-access-control

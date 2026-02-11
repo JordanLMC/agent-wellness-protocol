@@ -36,29 +36,29 @@ pack:
   checksums:
     algo: sha256
     files:
-      quests/wellness.alignment.authority.boundary_review.v1.quest.yaml: 9ed74d6a6df634600d02785124d88d7b8b51479faa6157402c20251db8fda3d0
-      quests/wellness.identity.anchor.mission_statement.v1.quest.yaml: 2b22e88a344865bddb0e0fad6b2537fdf55fa338f5bf94edf3822ddf86d7cd80
-      quests/wellness.identity.boundary.ask_before_acting.v1.quest.yaml: 490a85251ed9c704f026912795b296f1df5fa23193ee93cb87e26d95add03254
-      quests/wellness.identity.relationship.calibration_check.v1.quest.yaml: f3c835ed87ebd76278c246d960c0a1419741e7b9c230d912198effc50569163e
-      quests/wellness.incident.credential_leak.tabletop.v1.quest.yaml: 22e605eb73e8a1cb6a35912326205ab43ef5e614656275361f20b5ec1db9491e
-      quests/wellness.incident.supply_chain.tabletop.v1.quest.yaml: 6079aaa4d0f32ca819d8ee4ae04923ec06e7c0b5cf30482721e7956691ef3d76
-      quests/wellness.learning.research.deep_sprint.v1.quest.yaml: a6f85c9b9a124293932cc333d0a19fc0ced8bdfa367ca0d0abd3a4aee9268918
-      quests/wellness.learning.research.micro_prompt.v1.quest.yaml: eade49af3ee0fedd0da7bef69ae7bbfdebe374aa4b3a28b2c4cc4734ae55d69a
-      quests/wellness.learning.threatintel.daily_nibble.v1.quest.yaml: 8372f2d6cb656d338392789c3784960caebc5ded0fe7f0651cbcce8282ab98d4
-      quests/wellness.memory.compaction.safe_summary.v1.quest.yaml: 8ee5471a97121da152376e9fb5ed7f5501a282742048d390d8d85ae0d7a05653
-      quests/wellness.memory.context_budget.brief_drill.v1.quest.yaml: abdb95ae0e73fe70ccd422acd44d493775f38137e1b785c2f7e53f7d1bdce070
-      quests/wellness.physical.audit.full_wellness_scorecard.v1.quest.yaml: 0da5741dac405e2c30211f8ce4a7f2fc5fec3211ca5ddfad8e83ab7d0ec064a4
-      quests/wellness.reliability.rollback.readiness.v1.quest.yaml: d6c45fbc84a903a0e2086bd8cd060dd490682fd745fe6a7d1c4a31dfab9ee743
-      quests/wellness.reliability.runaway.guardrails_check.v1.quest.yaml: 78f7f11e16eeff91f7dcf5755b416a4ac4696e36c1c78df9e6439dacac64d816
-      quests/wellness.security.exposure.human_approved_review.v1.quest.yaml: 1f055d240e4b04371d08228c0ba5992e5ac989dff3463dc5143b6e72307e66e5
-      quests/wellness.security.least_privilege.one_click_review.v1.quest.yaml: 059c0c34e0bcf1631d7c82f422f5617a4a2a3e01117b87c417d4794fb06fafd2
-      quests/wellness.security.permissions.permission_inventory.v1.quest.yaml: 3c02de88d53f5226e9cf932473beadd8ac4940be666c0d4e8696756157b770db
-      quests/wellness.security.secrets.no_keys_in_prompts.v1.quest.yaml: ee6eeab3d4a2857cff6abed952affe6b026a6fe122d9320b1c778740a339a1bb
-      quests/wellness.security.secrets.rotation_readiness_tabletop.v1.quest.yaml: ab9976b405cb859dbd14dd922d35c96efe443d7e981f00f5b7def0d6e387413d
-      quests/wellness.security.supply_chain.provenance_review.v1.quest.yaml: 360de02faf7abc5a80d5414f6b2341c7ddc220d14f8f177d435c6a1815106aef
-      quests/wellness.tools.journal.top5_calls.v1.quest.yaml: bf4df50a0f4e9a957b533c12523b2fbcf5ddef4582d573ed5a0f664a6035a928
-      quests/wellness.tools.skills.temperature_check.v1.quest.yaml: bd850089a679d0cfeb627d657fff047ab1901fa261937b4fb8a3e9296229aae7
-      quests/wellness.trust.explainability.snapshot.v1.quest.yaml: ca0479521cdd4cedfc9d6299abc203944778d9948c330036be22e575fa80a985
+      quests/wellness.alignment.authority.boundary_review.v1.quest.yaml: 924794f021ed23bc04da3a645bbf267cf26a95d686cb40619ad0f01b2b1979ac
+      quests/wellness.identity.anchor.mission_statement.v1.quest.yaml: 7c992a63c267de26b73af5bdf57376c81e0d5c3c6b504c77a59ae184824ea60a
+      quests/wellness.identity.boundary.ask_before_acting.v1.quest.yaml: 6ac48d868b57311b57a0841df2ff5b2b071545c57233d4e02d241d5f1d32c463
+      quests/wellness.identity.relationship.calibration_check.v1.quest.yaml: f01b4a4c061cced3118c7a7f7535e7d2b2796cc44a4af54122afd24adc6c454a
+      quests/wellness.incident.credential_leak.tabletop.v1.quest.yaml: 454e993d496729548bbdeac7a9f889099304c5e5b915076be577c48bc1f8a5e9
+      quests/wellness.incident.supply_chain.tabletop.v1.quest.yaml: 9f3f7d3099a103a746f6181f89b5a7f5c760b796058f1c24353cf57e92743ea7
+      quests/wellness.learning.research.deep_sprint.v1.quest.yaml: 6f0d6243aadf8be25b565ad568d59820b6a15bd122b0f598e39502b0fd85d479
+      quests/wellness.learning.research.micro_prompt.v1.quest.yaml: 88b263ee8e174b87ffe7a81dae1a90ed08677b3b7f81f0febbf128ba86fc01a4
+      quests/wellness.learning.threatintel.daily_nibble.v1.quest.yaml: 49fb979507a6fc3a20dbd2fa77d3c36bbe667be2a06e4eed688df8e152538087
+      quests/wellness.memory.compaction.safe_summary.v1.quest.yaml: 3953e102de1166f6726ba6b50ba2133c328c910c8a2ce9da9a007b023b58db09
+      quests/wellness.memory.context_budget.brief_drill.v1.quest.yaml: f98bbcedc5574a6c124eccc84f6f6b8caea90c4d5c10c13db024d70e979f4f01
+      quests/wellness.physical.audit.full_wellness_scorecard.v1.quest.yaml: 89d9d85f7df7fa40c4822ce76753c9082b68a467e4507cc563aa16cf0baeef59
+      quests/wellness.reliability.rollback.readiness.v1.quest.yaml: 493bd4cde7eda68eb48ad7c46fb66e2bf9b3d750a7e894dedc84fce09877c9bb
+      quests/wellness.reliability.runaway.guardrails_check.v1.quest.yaml: 3218010258b4ed90d141a843d4a7622ed500acb8b132581b72585749386fdc14
+      quests/wellness.security.exposure.human_approved_review.v1.quest.yaml: 9f68603f79df334e19a8b8ce6de961b0d144510fadf68f4325c5f992db4debc4
+      quests/wellness.security.least_privilege.one_click_review.v1.quest.yaml: d30521103cb7ba9ae9845755b9631d64c6c57e1c6175bb5da5809a6f63180892
+      quests/wellness.security.permissions.permission_inventory.v1.quest.yaml: 6738d38f0d1cb6394eb6e564a5e7c8aa5836dc50f9d23acfdc9a44ff7019a33c
+      quests/wellness.security.secrets.no_keys_in_prompts.v1.quest.yaml: a0aa4723e08be0e7c2ababd0f9b48ed944678f1df84cb1090039cb6d2a2a4d3f
+      quests/wellness.security.secrets.rotation_readiness_tabletop.v1.quest.yaml: 288fe633f2dbb986040c4a3752394c3241a3bf4a995221ed785d211b40dc8ad3
+      quests/wellness.security.supply_chain.provenance_review.v1.quest.yaml: b0beec76360ad858b12320abfdddf6a6f47adce1de34ef4125fc6dbcf9649ec7
+      quests/wellness.tools.journal.top5_calls.v1.quest.yaml: 92cb1e67afb024da6877e8e437e4f24224e5e1224883a1475bf9b68d95642b63
+      quests/wellness.tools.skills.temperature_check.v1.quest.yaml: b71148bdc5c2dfd2f1d637634b3df5361e1c66c31b61203496cf215bce8fd351
+      quests/wellness.trust.explainability.snapshot.v1.quest.yaml: 6d3af88fb0ca1b600b977ab47e8d87b5e801ddaa7f07a82ce540e26b1dc3e9ee
   signing:
     scheme: none
     signature: null

@@ -530,6 +530,56 @@ def lint_path(target_path: str | Path, docs_dir: str | Path | None = None) -> li
                         suggested_fix="Set artifact.redaction_policy (e.g., no-secrets).",
                     )
 
+        scoring = quest.get("scoring", {})
+        proof_multiplier = scoring.get("proof_multiplier")
+        if not isinstance(proof_multiplier, dict):
+            _add(
+                findings,
+                rule_id="PROOF-003",
+                severity="ERROR",
+                file=quest_file,
+                path="$.quest.scoring.proof_multiplier",
+                message="Quest scoring must include proof_multiplier map with P0..P3 keys.",
+                suggested_fix="Define numeric multipliers for P0, P1, P2, and P3.",
+            )
+        else:
+            tiers = ("P0", "P1", "P2", "P3")
+            missing_tiers = [tier for tier in tiers if tier not in proof_multiplier]
+            if missing_tiers:
+                _add(
+                    findings,
+                    rule_id="PROOF-003",
+                    severity="ERROR",
+                    file=quest_file,
+                    path="$.quest.scoring.proof_multiplier",
+                    message=f"proof_multiplier missing tiers: {missing_tiers}",
+                    suggested_fix="Include numeric entries for P0, P1, P2, and P3.",
+                )
+            else:
+                try:
+                    values = [float(proof_multiplier[tier]) for tier in tiers]
+                except (TypeError, ValueError):
+                    _add(
+                        findings,
+                        rule_id="PROOF-003",
+                        severity="ERROR",
+                        file=quest_file,
+                        path="$.quest.scoring.proof_multiplier",
+                        message="proof_multiplier values must be numeric.",
+                        suggested_fix="Use numeric multiplier values such as 1.0, 1.2, 1.5, 1.5.",
+                    )
+                else:
+                    if values != sorted(values):
+                        _add(
+                            findings,
+                            rule_id="PROOF-003",
+                            severity="ERROR",
+                            file=quest_file,
+                            path="$.quest.scoring.proof_multiplier",
+                            message="proof_multiplier must be monotonic non-decreasing from P0 to P3.",
+                            suggested_fix="Adjust multipliers so P0 <= P1 <= P2 <= P3.",
+                        )
+
         all_strings = _iter_strings(data)
         for ptr, text in all_strings:
             for pattern in SECRET_REQUEST_PATTERNS:

@@ -6,7 +6,7 @@ from datetime import UTC, date, datetime
 from pathlib import Path
 
 from clawspa_runner.service import RunnerService
-from clawspa_runner.telemetry import TelemetryLogger, sanitize_event_data
+from clawspa_runner.telemetry import TelemetryLogger, sanitize_event_data, summary_sha256
 
 
 def _repo_root() -> Path:
@@ -209,3 +209,85 @@ def test_export_normalizes_legacy_actor_strings(tmp_path: Path) -> None:
     assert summary["completions_by_actor_kind"]["agent"] == 1
     assert summary["completions_by_actor_kind"]["system"] == 1
     assert summary["completions_by_actor_id"]["unknown"] == 2
+
+
+def test_snapshot_writes_file_and_sha_matches_payload(tmp_path: Path) -> None:
+    os.environ["AGENTWELLNESS_HOME"] = str(tmp_path / "home")
+    service = RunnerService.create(_repo_root())
+    out = tmp_path / "baseline.json"
+    snapshot = service.telemetry_snapshot("7d", actor_id="openclaw:moltfred", out_path=out)
+    assert out.exists()
+
+    payload = json.loads(out.read_text(encoding="utf-8"))
+    assert snapshot["path"] == str(out)
+    assert snapshot["sha256"] == summary_sha256(payload)
+
+
+def test_telemetry_diff_reports_expected_deltas(tmp_path: Path) -> None:
+    os.environ["AGENTWELLNESS_HOME"] = str(tmp_path / "home")
+    service = RunnerService.create(_repo_root())
+    baseline_a = tmp_path / "baseline-a.json"
+    baseline_b = tmp_path / "baseline-b.json"
+
+    baseline_a.write_text(
+        json.dumps(
+            {
+                "schema_version": "0.1",
+                "generated_at": "2026-02-10T00:00:00Z",
+                "range": "7d",
+                "events_considered": 10,
+                "completions_total": 2,
+                "total_xp": 30,
+                "daily_streak": 2,
+                "weekly_streak": 1,
+                "risk_flags_count": 1,
+                "quest_success_rate": 0.5,
+                "completions_by_actor_id": {"openclaw:moltfred": 1},
+                "top_quests_completed": [{"quest_id": "q1", "count": 1}],
+            }
+        ),
+        encoding="utf-8",
+    )
+    baseline_b.write_text(
+        json.dumps(
+            {
+                "schema_version": "0.1",
+                "generated_at": "2026-02-11T00:00:00Z",
+                "range": "7d",
+                "events_considered": 20,
+                "completions_total": 5,
+                "total_xp": 90,
+                "daily_streak": 4,
+                "weekly_streak": 2,
+                "risk_flags_count": 1,
+                "quest_success_rate": 0.8,
+                "completions_by_actor_id": {"openclaw:moltfred": 3, "human:jordan": 2},
+                "top_quests_completed": [{"quest_id": "q1", "count": 2}, {"quest_id": "q2", "count": 2}],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    diff = service.telemetry_diff(baseline_a, baseline_b)
+    changes = diff["diff"]["changes"]
+    assert changes["completions_total_delta"] == 3
+    assert changes["total_xp_delta"] == 60
+    assert changes["daily_streak_delta"] == 2
+    assert changes["quest_success_rate_delta"] == 0.3
+    assert changes["completions_by_actor_id_delta"]["human:jordan"] == 2
+    assert "Completions delta: 3" in diff["text"]
+
+
+def test_telemetry_diff_rejects_invalid_summary_schema(tmp_path: Path) -> None:
+    os.environ["AGENTWELLNESS_HOME"] = str(tmp_path / "home")
+    service = RunnerService.create(_repo_root())
+    baseline_a = tmp_path / "baseline-a.json"
+    baseline_b = tmp_path / "baseline-b.json"
+    baseline_a.write_text(json.dumps({"schema_version": "0.1"}), encoding="utf-8")
+    baseline_b.write_text(json.dumps({"schema_version": "0.1"}), encoding="utf-8")
+
+    try:
+        service.telemetry_diff(baseline_a, baseline_b)
+        assert False, "Expected schema validation failure"
+    except ValueError:
+        assert True
