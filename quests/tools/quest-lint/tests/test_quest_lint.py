@@ -274,10 +274,17 @@ def test_core_pack_manifest_and_checksums_pass() -> None:
     manifest = yaml.safe_load((pack_dir / "pack.yaml").read_text(encoding="utf-8"))
     quest_files = sorted((pack_dir / "quests").glob("*.quest.yaml"))
     quest_ids = []
+    authorized_quests_with_confirm = 0
     for file_path in quest_files:
         quest_data = yaml.safe_load(file_path.read_text(encoding="utf-8"))
-        quest_ids.append(quest_data["quest"]["id"])
+        quest = quest_data["quest"]
+        quest_ids.append(quest["id"])
+        if quest.get("mode") == "authorized":
+            human_steps = quest.get("steps", {}).get("human", [])
+            assert any(step.get("type") == "confirm" for step in human_steps)
+            authorized_quests_with_confirm += 1
 
     assert len(quest_files) == 23
     assert sorted(manifest["pack"]["quests"]) == sorted(quest_ids)
     assert len(set(quest_ids)) == len(quest_ids)
+    assert authorized_quests_with_confirm >= 1

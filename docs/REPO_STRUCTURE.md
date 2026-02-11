@@ -32,6 +32,9 @@ Define a repo layout that:
     CONTRIBUTING.md
     TELEMETRY.md
 
+  /research/
+    *.pdf                     # local research artifacts for quest and pillar design
+
   /quests/
     /packs/
       /wellness.core.v0/
@@ -86,6 +89,10 @@ Define a repo layout that:
 ---
 
 ## Key files
+
+### /research
+- Stores local research artifacts (for example pillar PDFs) used to inform quest content.
+- Git LFS is optional; use it when binary size or churn makes normal Git history noisy.
 
 ### README.md (root)
 Must answer in 60 seconds:
