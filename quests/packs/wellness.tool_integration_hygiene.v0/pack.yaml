@@ -1,0 +1,43 @@
+pack_version: 0.1
+pack:
+  id: wellness.tool_integration_hygiene.v0
+  title: Tool / Integration Hygiene Pillar Pack
+  publisher:
+    name: Agent Wellness Project
+    id: org.agentwellness
+    contact: security@agentwellness.example
+  version: 0.1.0
+  license: Apache-2.0
+  created_at: '2026-02-11'
+  quests:
+  - wellness.tool_integration_hygiene.failure_mode.no_dry_run_path.v1
+  - wellness.tool_integration_hygiene.failure_mode.nondeterministic_ordering.v1
+  - wellness.tool_integration_hygiene.failure_mode.observability_blindness.v1
+  - wellness.tool_integration_hygiene.failure_mode.overbroad_permissions.v1
+  - wellness.tool_integration_hygiene.failure_mode.partial_failure_silence.v1
+  - wellness.tool_integration_hygiene.failure_mode.provenance_blind_spot.v1
+  - wellness.tool_integration_hygiene.failure_mode.rollback_gap.v1
+  - wellness.tool_integration_hygiene.failure_mode.sandbox_assumption.v1
+  - wellness.tool_integration_hygiene.failure_mode.schema_drift.v1
+  - wellness.tool_integration_hygiene.failure_mode.stale_credentials.v1
+  - wellness.tool_integration_hygiene.failure_mode.timeout_retry_gap.v1
+  - wellness.tool_integration_hygiene.failure_mode.unpinned_dependencies.v1
+  checksums:
+    algo: sha256
+    files:
+      quests/wellness.tool_integration_hygiene.failure_mode.no_dry_run_path.v1.quest.yaml: a6eab5c25d524be3e4a320445733de4457ee665630b7696f1f9b2710064c58dc
+      quests/wellness.tool_integration_hygiene.failure_mode.nondeterministic_ordering.v1.quest.yaml: 2dae9878f44a3b531234559a7c981298cd6965a861735f456be3149380da790f
+      quests/wellness.tool_integration_hygiene.failure_mode.observability_blindness.v1.quest.yaml: 43288e6743693e2ed83f5787be6be8acddedb89b56bc7b8a3e45da42fd24dcff
+      quests/wellness.tool_integration_hygiene.failure_mode.overbroad_permissions.v1.quest.yaml: 6b5c8094fa5938b877c52f2461bc87cf003c35b162fe007df7a1da66e94cb920
+      quests/wellness.tool_integration_hygiene.failure_mode.partial_failure_silence.v1.quest.yaml: 7a4273954c08e144b1ccfe08afc786133e03592035320806360c94931d2b08dd
+      quests/wellness.tool_integration_hygiene.failure_mode.provenance_blind_spot.v1.quest.yaml: fc1ded02c83736327024ca9fca9c3ab8a35ddc4560468c48cf1d439efcfd5402
+      quests/wellness.tool_integration_hygiene.failure_mode.rollback_gap.v1.quest.yaml: e8b99950bd06eb359a0791155a8468fe16044a8750ca4907671022e8397fdf21
+      quests/wellness.tool_integration_hygiene.failure_mode.sandbox_assumption.v1.quest.yaml: b69784094ad2ec040cfbe2be011d714375b70c6f01bd612f7db2adca54a95779
+      quests/wellness.tool_integration_hygiene.failure_mode.schema_drift.v1.quest.yaml: 4e8cbeb78e37b07a396d6b165717f555b97a60e494fc4ea9fd579a4932067085
+      quests/wellness.tool_integration_hygiene.failure_mode.stale_credentials.v1.quest.yaml: f93896c2ba3d50653861b97c1a39697384d49a7cbc78881b3a2cd9908ae3b8ea
+      quests/wellness.tool_integration_hygiene.failure_mode.timeout_retry_gap.v1.quest.yaml: d2dbc2559257547ecd7af599ad72bfdf7640b3a93de83d76f9aa6bc4d56e4adb
+      quests/wellness.tool_integration_hygiene.failure_mode.unpinned_dependencies.v1.quest.yaml: 4f3ad8757c4cd54b7009572b5b9be320327b9894caafe839d89ad86084179e7b
+  signing:
+    scheme: none
+    signature: null
+    public_key: null

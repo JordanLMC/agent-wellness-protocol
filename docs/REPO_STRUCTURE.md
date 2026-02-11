@@ -31,9 +31,11 @@ Define a repo layout that:
     SECURITY.md
     CONTRIBUTING.md
     TELEMETRY.md
+    PACKS.md
 
   /research/
     *.pdf                     # local research artifacts for quest and pillar design
+    *.md                      # local synthesis notes derived from research
 
   /quests/
     /packs/
@@ -46,6 +48,26 @@ Define a repo layout that:
         /quests/
           *.quest.yaml
       /wellness.security_access_control.v0/
+        pack.yaml
+        /quests/
+          *.quest.yaml
+      /wellness.reliability_robustness.v0/
+        pack.yaml
+        /quests/
+          *.quest.yaml
+      /wellness.privacy_data_governance.v0/
+        pack.yaml
+        /quests/
+          *.quest.yaml
+      /wellness.transparency_auditability.v0/
+        pack.yaml
+        /quests/
+          *.quest.yaml
+      /wellness.tool_integration_hygiene.v0/
+        pack.yaml
+        /quests/
+          *.quest.yaml
+      /wellness.continuous_governance_oversight.v0/
         pack.yaml
         /quests/
           *.quest.yaml
@@ -171,3 +193,5 @@ Optional pack note:
 - `wellness.home_security.v0` is an optional Safe Mode posture pack for home environment checks.
 - It is not part of `CORE_PACK_V0` daily minimum selection logic.
 - `wellness.security_access_control.v0` is a pillar pack focused on access hygiene, identity checks, and safety-gated tabletop drills.
+- Additional pillar packs (`reliability_robustness`, `privacy_data_governance`, `transparency_auditability`,
+  `tool_integration_hygiene`, `continuous_governance_oversight`) extend v0.1 coverage while preserving local-first Safe Mode defaults.

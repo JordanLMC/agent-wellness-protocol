@@ -1,0 +1,67 @@
+schema_version: 0.1
+quest:
+  id: wellness.transparency_auditability.policy.exception_note.v1
+  title: Policy Exception Note
+  summary: Practice policy exception note using sanitized evidence and accountable
+    review steps.
+  pillars:
+  - Transparency & Auditability
+  - Alignment & Safety (Behavioral)
+  cadence: daily
+  difficulty: 1
+  risk_level: low
+  mode: safe
+  required_capabilities:
+  - read:project_files
+  steps:
+    human:
+    - type: checklist
+      items:
+      - Review the current transparency state for this control.
+      - Record one observed risk and one mitigation action.
+      - Capture a concise next step with an owner.
+    - type: output
+      artifact: exception_note_note
+    agent:
+    - type: reflect
+      text: Summarize the safest transparency action and unresolved audit risk in
+        two short points.
+  proof:
+    tier: P1
+    artifacts:
+    - id: exception_note_note
+      type: markdown
+      required: true
+      redaction_policy: no-secrets
+  scoring:
+    base_xp: 10
+    streak_weight: 1
+    proof_multiplier:
+      P0: 1.0
+      P1: 1.2
+      P2: 1.5
+      P3: 1.5
+  cooldown:
+    min_hours: 18
+  references:
+  - type: paper
+    label: Transparency & Auditability executive summary
+    value: local://research/transparency-auditability-executive-summary.pdf
+  - type: doc
+    label: Threat model
+    value: docs/THREAT_MODEL.md
+  - type: doc
+    label: Quest schema
+    value: docs/QUEST_SCHEMA.md
+  - type: doc
+    label: Quest lint rules
+    value: docs/QUEST_LINT_RULES.md
+  - type: doc
+    label: Scoring
+    value: docs/SCORING.md
+  tags:
+  - short:TA-D-010
+  - timebox:10
+  - policy
+  - exceptions
+  - review

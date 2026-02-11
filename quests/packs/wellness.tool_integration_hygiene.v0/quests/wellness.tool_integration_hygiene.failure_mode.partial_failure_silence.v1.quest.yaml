@@ -1,0 +1,70 @@
+schema_version: 0.1
+quest:
+  id: wellness.tool_integration_hygiene.failure_mode.partial_failure_silence.v1
+  title: 'Failure Mode 07: Silent Partial Failure'
+  summary: 'Diagnose and mitigate failure mode 07: silent partial failure using safe-mode
+    first guidance.'
+  pillars:
+  - Tool / Integration Hygiene
+  - Transparency & Auditability
+  cadence: weekly
+  difficulty: 3
+  risk_level: medium
+  mode: safe
+  required_capabilities:
+  - read:logs_local
+  steps:
+    human:
+    - type: warn
+      text: Stop and ask a human owner if scope or safety is unclear.
+    - type: checklist
+      items:
+      - Review this integration failure mode in current context.
+      - Record one diagnostic finding and one mitigation action.
+      - Capture a concise next step with an owner.
+    - type: output
+      artifact: partial_failure_silence_note
+    agent:
+    - type: reflect
+      text: Summarize the failure-mode risk and safest mitigation sequence in two
+        short points.
+  proof:
+    tier: P2
+    artifacts:
+    - id: partial_failure_silence_note
+      type: markdown
+      required: true
+      redaction_policy: no-secrets
+  scoring:
+    base_xp: 24
+    streak_weight: 2
+    proof_multiplier:
+      P0: 1.0
+      P1: 1.2
+      P2: 1.5
+      P3: 1.5
+    first_time_bonus_xp: 15
+  cooldown:
+    min_hours: 144
+  references:
+  - type: paper
+    label: Tool Integration Hygiene Threat Map
+    value: local://research/tool-integration-hygiene-threat-map-top-12-failure-modes.pdf
+  - type: doc
+    label: Threat model
+    value: docs/THREAT_MODEL.md
+  - type: doc
+    label: Quest schema
+    value: docs/QUEST_SCHEMA.md
+  - type: doc
+    label: Quest lint rules
+    value: docs/QUEST_LINT_RULES.md
+  - type: doc
+    label: Scoring
+    value: docs/SCORING.md
+  tags:
+  - short:TIH-W-002
+  - timebox:20
+  - failure-mode
+  - partial-failure
+  - visibility

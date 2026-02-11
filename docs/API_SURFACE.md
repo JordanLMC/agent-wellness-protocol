@@ -34,6 +34,7 @@ Supported optional headers for attribution and audit context:
 - `X-Clawspa-Source`: `cli | api | mcp` (defaults to `api`)
 - `X-Clawspa-Actor`: `human | agent | system` (endpoint-specific default if omitted)
 - `X-Clawspa-Actor-Id`: actor identifier string (for example `openclaw:moltfred`, `human:jordan`)
+- `X-Clawspa-Trace-Id`: request trace identifier for cross-channel audit continuity
 
 Actor id resolution precedence:
 1. `X-Clawspa-Actor-Id` header
@@ -41,6 +42,11 @@ Actor id resolution precedence:
 3. fallback `"<source>:unknown"` (for example `api:unknown`, `mcp:unknown`)
 
 Actor ids are sanitized before telemetry persistence (control chars stripped, secret-like content redacted, long values truncated).
+
+Trace-id behavior:
+- if `X-Clawspa-Trace-Id` is absent, API generates one (`api:<uuid>`).
+- API echoes the effective value in response header `X-Clawspa-Trace-Id`.
+- Telemetry events emitted by API-backed actions include `trace_id`.
 
 ---
 
@@ -86,6 +92,8 @@ Actor ids are sanitized before telemetry persistence (control chars stripped, se
 ### Plans (daily/weekly)
 - `GET /v1/plans/daily?date=YYYY-MM-DD`
 - `POST /v1/plans/daily/generate?date=YYYY-MM-DD`
+- `GET /v1/plans/weekly?date=YYYY-MM-DD`
+- `POST /v1/plans/weekly/generate?date=YYYY-MM-DD`
   - v0.1: rule-based picker
   - later: AI planner selects from curated quests
 
@@ -104,11 +112,14 @@ Actor ids are sanitized before telemetry persistence (control chars stripped, se
 - `GET /v1/scorecard/export`
   - returns a shareable redacted export (local by default)
   - excludes raw proof artifacts and excludes `proof_id` from recent completion rows
+  - includes active trust signals with explicit expiries (trust signals are evidence metadata, not authority)
 
 ### Telemetry (v0.1)
 - v0.1 telemetry is local CLI-driven:
   - append-only local event log
-  - aggregated export via runner CLI
+  - hash-chain verification via runner CLI
+  - retention purge by range (older-than) via runner CLI
+  - aggregated export/snapshot/diff via runner CLI
 - No raw telemetry event API endpoint is exposed by default.
 
 ### Capability grants (Authorized Mode control)

@@ -62,7 +62,10 @@ We treat this as **one product with three surfaces**:
   - quest completion history
   - local proofs (redacted and/or hashed)
   - local telemetry events (sanitized, append-only JSONL)
+  - telemetry hash-chain fields (`prev_hash`, `event_hash`) with local verification
+  - retention controls for telemetry/proofs (`CLAWSPA_TELEMETRY_RETENTION_DAYS`, `CLAWSPA_PROOFS_RETENTION_DAYS`)
   - actor-attributed telemetry (`actor.kind`, `actor.id`) for per-actor analysis
+  - request trace attribution (`trace_id`) propagated across CLI/API/MCP
 
 ### C) MCP / Tool Server (optional, but likely)
 - Exposes tools like:
@@ -72,6 +75,7 @@ We treat this as **one product with three surfaces**:
   - `get_scorecard`
 - Acts as a bridge between agents and the local runner.
 - Enforces the same Safe/Authorized gating.
+- Generates and forwards `trace_id` context when missing.
 
 ### D) Web Hub (later)
 - Reads exported scorecards and trust signals.
@@ -84,7 +88,7 @@ We treat this as **one product with three surfaces**:
 
 ### Flow 1: Human-led onboarding (Safe Mode)
 1. Human installs runner (or uses a simple desktop wrapper).
-2. Runner pulls “Core Pack” from GitHub (or ships embedded).
+2. Runner loads local packs from `quests/packs/` (and optional explicit local sources).
 3. Runner runs a 5-minute baseline:
    - explains Safe Mode vs Authorized Mode
    - sets “working agreement” (confirmation policy)
@@ -94,9 +98,9 @@ We treat this as **one product with three surfaces**:
 
 ### Flow 2: Daily quests (human + agent)
 1. Runner selects the daily set:
-   - 1 security hygiene quest
-   - 1 memory/context hygiene quest
-   - 1 purpose/alignment quest
+   - balanced across security, memory/context, and identity/alignment
+   - cadence-aware (can include due weekly/monthly items)
+   - capability- and cooldown-aware under Safe Mode defaults
 2. Human completes checklist prompts; agent completes “agent lane” prompts.
 3. Proof is generated locally:
    - summary markdown
@@ -147,15 +151,17 @@ Authorized Mode should be rare and feel like “sudo.”
 ### Local proof store
 - Contains artifacts declared in quests (QUEST_SCHEMA.md).
 - Redaction happens before any export.
+- Retention purge supports `older-than` windows to minimize stale sensitive metadata.
 
 ### Export formats (MVP)
 - `scorecard.json` (local only)
 - `shareable_summary.md` (optional)
 - `attestation.json` (optional, unsigned for v0.1)
 
-### Trust signals (later)
+### Trust signals
 - A trust signal is a **time-bounded, scoped** statement backed by proof.
 - Example: “Security hygiene daily streak: 7 days (last 14 days), P1 evidence.”
+- v0.1 stores active trust signals locally and surfaces them in scorecard exports.
 
 > Important: trust signals never grant permissions automatically.
 
@@ -168,7 +174,9 @@ Even at MVP, we should implement:
 - “dangerous pattern” detection in quest content
 - Safe Mode enforcement
 - Proof redaction before export
-- Minimal telemetry (ideally none by default)
+- Tamper-evident telemetry hash-chain + verification
+- Sanitizer hardening with `risk.flagged` when redaction/truncation occurs
+- Retention purge with archive + chain-preserving rewrite
 
 ---
 

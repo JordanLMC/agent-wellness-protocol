@@ -1,0 +1,69 @@
+schema_version: 0.1
+quest:
+  id: wellness.privacy_data_governance.boundary.sensitive_data_check.v1
+  title: Sensitive Data Boundary Check
+  summary: Practice sensitive data boundary check while preserving privacy and local-first
+    handling.
+  pillars:
+  - Privacy & Data Governance
+  - Tool / Integration Hygiene
+  cadence: daily
+  difficulty: 2
+  risk_level: medium
+  mode: safe
+  required_capabilities:
+  - read:agent_config
+  steps:
+    human:
+    - type: warn
+      text: Stop and ask a human owner if scope or safety is unclear.
+    - type: checklist
+      items:
+      - Review the current state for this privacy control.
+      - Record one observed risk and one mitigation action.
+      - Capture a concise next step with an owner.
+    - type: output
+      artifact: sensitive_data_check_note
+    agent:
+    - type: reflect
+      text: Summarize the safest next action and unresolved privacy risk in two short
+        points.
+  proof:
+    tier: P1
+    artifacts:
+    - id: sensitive_data_check_note
+      type: markdown
+      required: true
+      redaction_policy: no-secrets
+  scoring:
+    base_xp: 24
+    streak_weight: 1
+    proof_multiplier:
+      P0: 1.0
+      P1: 1.2
+      P2: 1.5
+      P3: 1.5
+  cooldown:
+    min_hours: 18
+  references:
+  - type: paper
+    label: Privacy for Persistent Agents
+    value: local://research/privacy-persistent-agents-model-playbook-quests-metrics-redaction.pdf
+  - type: doc
+    label: Threat model
+    value: docs/THREAT_MODEL.md
+  - type: doc
+    label: Quest schema
+    value: docs/QUEST_SCHEMA.md
+  - type: doc
+    label: Quest lint rules
+    value: docs/QUEST_LINT_RULES.md
+  - type: doc
+    label: Scoring
+    value: docs/SCORING.md
+  tags:
+  - short:PDG-D-004
+  - timebox:15
+  - boundaries
+  - data-flow
+  - ownership

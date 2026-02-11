@@ -47,7 +47,7 @@ quest:
   references:
   - type: paper
     label: Security & Access Control pillar
-    value: local://research/Security & Access Control pillar.pdf
+    value: local://research/security-access-control-pillar.pdf
   - type: doc
     label: Threat model
     value: docs/THREAT_MODEL.md

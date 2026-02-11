@@ -1,0 +1,59 @@
+pack_version: 0.1
+pack:
+  id: wellness.transparency_auditability.v0
+  title: Transparency & Auditability Pillar Pack
+  publisher:
+    name: Agent Wellness Project
+    id: org.agentwellness
+    contact: security@agentwellness.example
+  version: 0.1.0
+  license: Apache-2.0
+  created_at: '2026-02-11'
+  quests:
+  - wellness.transparency_auditability.access.log_anomaly_digest.v1
+  - wellness.transparency_auditability.change.management_review.v1
+  - wellness.transparency_auditability.control.owner_attestation_review.v1
+  - wellness.transparency_auditability.coverage.audit_gap_scan.v1
+  - wellness.transparency_auditability.evidence.hash_registry_update.v1
+  - wellness.transparency_auditability.forensics.replay_readiness_tabletop.v1
+  - wellness.transparency_auditability.incident.tamper_alert_response_tabletop.v1
+  - wellness.transparency_auditability.journal.knowledge_update_entry.v1
+  - wellness.transparency_auditability.logs.approval_decision_review.v1
+  - wellness.transparency_auditability.logs.config_change_digest.v1
+  - wellness.transparency_auditability.logs.tool_invocation_review.v1
+  - wellness.transparency_auditability.policy.exception_note.v1
+  - wellness.transparency_auditability.reporting.external_shareable_export.v1
+  - wellness.transparency_auditability.retention.redaction_policy_audit.v1
+  - wellness.transparency_auditability.sanitizer.flag_review.v1
+  - wellness.transparency_auditability.schema.audit_event_field_check.v1
+  - wellness.transparency_auditability.telemetry.hash_chain_verify_drill.v1
+  - wellness.transparency_auditability.trace.cross_channel_consistency_check.v1
+  - wellness.transparency_auditability.trace.request_id_presence_spotcheck.v1
+  - wellness.transparency_auditability.trace.request_id_uniqueness_review.v1
+  checksums:
+    algo: sha256
+    files:
+      quests/wellness.transparency_auditability.access.log_anomaly_digest.v1.quest.yaml: 25cfb984021395761fe70236fb705801150e2fa54c084981184e762ee6b95a69
+      quests/wellness.transparency_auditability.change.management_review.v1.quest.yaml: 4de47fee92a7ca5bbe61521dad39feca85c05306567c60aa600beca6e7dacf35
+      quests/wellness.transparency_auditability.control.owner_attestation_review.v1.quest.yaml: 6bb3e083faca1ce80ea973e075792f60fa0c20955a5aa2efeacb848c425ecace
+      quests/wellness.transparency_auditability.coverage.audit_gap_scan.v1.quest.yaml: d812156ac026a37200cc66699511298521f9f9d209d07995ccf9447e250324f8
+      quests/wellness.transparency_auditability.evidence.hash_registry_update.v1.quest.yaml: f282b3331ee821d4246f77b4bd598d2cd814354dcabcf781f3c388c43e434100
+      quests/wellness.transparency_auditability.forensics.replay_readiness_tabletop.v1.quest.yaml: 6b267f2820deaa5363da192567beeadb669ca4d345e53ddf63ea1fe2948b3544
+      quests/wellness.transparency_auditability.incident.tamper_alert_response_tabletop.v1.quest.yaml: 23ae8150c8926b3d08e3beaca39d87bec25a76e46cbc70b7099a494e3df18800
+      quests/wellness.transparency_auditability.journal.knowledge_update_entry.v1.quest.yaml: 2ec5fdef4a3f8b2ce9d33a995a29d6576fea12c386e9c632a01edfcc17431d96
+      quests/wellness.transparency_auditability.logs.approval_decision_review.v1.quest.yaml: e7cc2816a372dbc23967f00747b3b43f8e76257f6ca06eb704e4d4dd792df536
+      quests/wellness.transparency_auditability.logs.config_change_digest.v1.quest.yaml: aed222b15727e7c29d336fe1e6d9f8594cefff5e9a10ca148652837b615d8224
+      quests/wellness.transparency_auditability.logs.tool_invocation_review.v1.quest.yaml: 48807ee91a2b4dfc282f07bee56558c09260735548c8ab1009848414d86000a3
+      quests/wellness.transparency_auditability.policy.exception_note.v1.quest.yaml: 67273fc5b67118347c4e46991a69fe0a4e580235a6fdaa09b47aec6b92010832
+      quests/wellness.transparency_auditability.reporting.external_shareable_export.v1.quest.yaml: b7e9b08c5a4dc98fc0a77a37a290d887e5289eebab94e6eacbd93dd8bf29ba8b
+      quests/wellness.transparency_auditability.retention.redaction_policy_audit.v1.quest.yaml: 5bfebbc7cdc7f3dfc146bd92c416d684e228baa34697511da4120f44e2f4a690
+      quests/wellness.transparency_auditability.sanitizer.flag_review.v1.quest.yaml: 15dc2b40a08ade66d08ab08fc62f88d386baafa204f055830ad5104de08faf8f
+      quests/wellness.transparency_auditability.schema.audit_event_field_check.v1.quest.yaml: 4fc4fa156cf12785ebf29932dd03e0b909b06a25f11af7a22fa91b4960e40ec1
+      quests/wellness.transparency_auditability.telemetry.hash_chain_verify_drill.v1.quest.yaml: 63a7c5ab51530455236b54924620aed637914a0a41e0b26a5ab5dc1c305f2b0e
+      quests/wellness.transparency_auditability.trace.cross_channel_consistency_check.v1.quest.yaml: 6289ad6ed697de307efb5f4f0493e64640ab39bec6d168b236e5bfb8a3715507
+      quests/wellness.transparency_auditability.trace.request_id_presence_spotcheck.v1.quest.yaml: 798c3a968c0448801424651a9fad37112f6445762e3138b81aa8c2d807ff119a
+      quests/wellness.transparency_auditability.trace.request_id_uniqueness_review.v1.quest.yaml: 28114dd315be3bc7feac9abda56d0dcffeb9e8f9dcaf7488ce1bf393287deab3
+  signing:
+    scheme: none
+    signature: null
+    public_key: null

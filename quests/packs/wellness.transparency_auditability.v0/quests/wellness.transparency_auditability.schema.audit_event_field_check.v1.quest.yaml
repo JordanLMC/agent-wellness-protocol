@@ -1,0 +1,69 @@
+schema_version: 0.1
+quest:
+  id: wellness.transparency_auditability.schema.audit_event_field_check.v1
+  title: Audit Event Field Check
+  summary: Practice audit event field check using sanitized evidence and accountable
+    review steps.
+  pillars:
+  - Transparency & Auditability
+  - Continuous Governance & Oversight
+  cadence: daily
+  difficulty: 2
+  risk_level: medium
+  mode: safe
+  required_capabilities:
+  - read:logs_local
+  steps:
+    human:
+    - type: warn
+      text: Stop and ask a human owner if scope or safety is unclear.
+    - type: checklist
+      items:
+      - Review the current transparency state for this control.
+      - Record one observed risk and one mitigation action.
+      - Capture a concise next step with an owner.
+    - type: output
+      artifact: audit_event_field_check_note
+    agent:
+    - type: reflect
+      text: Summarize the safest transparency action and unresolved audit risk in
+        two short points.
+  proof:
+    tier: P1
+    artifacts:
+    - id: audit_event_field_check_note
+      type: markdown
+      required: true
+      redaction_policy: no-secrets
+  scoring:
+    base_xp: 24
+    streak_weight: 1
+    proof_multiplier:
+      P0: 1.0
+      P1: 1.2
+      P2: 1.5
+      P3: 1.5
+  cooldown:
+    min_hours: 18
+  references:
+  - type: paper
+    label: Transparency & Auditability executive summary
+    value: local://research/transparency-auditability-executive-summary.pdf
+  - type: doc
+    label: Threat model
+    value: docs/THREAT_MODEL.md
+  - type: doc
+    label: Quest schema
+    value: docs/QUEST_SCHEMA.md
+  - type: doc
+    label: Quest lint rules
+    value: docs/QUEST_LINT_RULES.md
+  - type: doc
+    label: Scoring
+    value: docs/SCORING.md
+  tags:
+  - short:TA-D-009
+  - timebox:15
+  - schema
+  - audit-events
+  - consistency

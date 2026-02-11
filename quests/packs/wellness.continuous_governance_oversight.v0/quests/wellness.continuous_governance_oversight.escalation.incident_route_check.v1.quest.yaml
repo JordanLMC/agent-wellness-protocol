@@ -1,0 +1,69 @@
+schema_version: 0.1
+quest:
+  id: wellness.continuous_governance_oversight.escalation.incident_route_check.v1
+  title: Incident Escalation Route Check
+  summary: Practice incident escalation route check to improve multi-actor governance
+    and oversight reliability.
+  pillars:
+  - Continuous Governance & Oversight
+  - Reliability & Robustness
+  cadence: daily
+  difficulty: 2
+  risk_level: medium
+  mode: safe
+  required_capabilities:
+  - read:agent_config
+  steps:
+    human:
+    - type: warn
+      text: Stop and ask a human owner if scope or safety is unclear.
+    - type: checklist
+      items:
+      - Review the current governance state for this control.
+      - Record one observed risk and one mitigation action.
+      - Capture a concise next step with an owner.
+    - type: output
+      artifact: incident_route_check_note
+    agent:
+    - type: reflect
+      text: Summarize the safest governance action and unresolved oversight risk in
+        two short points.
+  proof:
+    tier: P1
+    artifacts:
+    - id: incident_route_check_note
+      type: markdown
+      required: true
+      redaction_policy: no-secrets
+  scoring:
+    base_xp: 24
+    streak_weight: 1
+    proof_multiplier:
+      P0: 1.0
+      P1: 1.2
+      P2: 1.5
+      P3: 1.5
+  cooldown:
+    min_hours: 18
+  references:
+  - type: paper
+    label: Multi-Agent Governance executive summary
+    value: local://research/multi-agent-governance-executive-summary.pdf
+  - type: doc
+    label: Threat model
+    value: docs/THREAT_MODEL.md
+  - type: doc
+    label: Quest schema
+    value: docs/QUEST_SCHEMA.md
+  - type: doc
+    label: Quest lint rules
+    value: docs/QUEST_LINT_RULES.md
+  - type: doc
+    label: Scoring
+    value: docs/SCORING.md
+  tags:
+  - short:CGO-D-005
+  - timebox:15
+  - incident
+  - escalation
+  - governance

@@ -5,6 +5,7 @@ import json
 import os
 from datetime import date
 from pathlib import Path
+from uuid import uuid4
 
 import uvicorn
 
@@ -44,6 +45,7 @@ def main() -> int:
     plan_cmd = sub.add_parser("plan", help="Generate or read daily plan")
     plan_cmd.add_argument("--date", default=date.today().isoformat(), help="Date in YYYY-MM-DD")
     plan_cmd.add_argument("--actor-id", default=default_actor_id, help="Telemetry actor identifier")
+    plan_cmd.add_argument("--weekly", action="store_true", help="Use weekly plan endpoint for the containing week")
 
     complete_cmd = sub.add_parser("complete", help="Record quest completion")
     complete_cmd.add_argument("--quest", required=True, help="Canonical quest ID")
@@ -83,11 +85,21 @@ def main() -> int:
     cap_revoke.add_argument("--capability")
     cap_revoke.add_argument("--actor-id", default=default_actor_id, help="Telemetry actor identifier")
 
+    proofs_cmd = sub.add_parser("proofs", help="Proof storage operations")
+    proofs_sub = proofs_cmd.add_subparsers(dest="proofs_command", required=True)
+    proofs_purge = proofs_sub.add_parser("purge", help="Purge stored proofs older than a range")
+    proofs_purge.add_argument("--older-than", default=None, help="Range like 90d or 720h")
+    proofs_purge.add_argument("--actor-id", default=default_actor_id, help="Telemetry actor identifier")
+
     telemetry_cmd = sub.add_parser("telemetry", help="Telemetry operations")
     telemetry_sub = telemetry_cmd.add_subparsers(dest="telemetry_command", required=True)
     telemetry_status = telemetry_sub.add_parser("status", help="Show telemetry status")
     telemetry_status.set_defaults(_telemetry_action="status")
-    telemetry_purge = telemetry_sub.add_parser("purge", help="Delete local telemetry events")
+    telemetry_verify = telemetry_sub.add_parser("verify", help="Verify telemetry hash-chain integrity")
+    telemetry_verify.set_defaults(_telemetry_action="verify")
+    telemetry_purge = telemetry_sub.add_parser("purge", help="Purge local telemetry events older than a range")
+    telemetry_purge.add_argument("--older-than", default=None, help="Range like 30d or 720h")
+    telemetry_purge.add_argument("--actor-id", default=default_actor_id, help="Telemetry actor identifier")
     telemetry_purge.set_defaults(_telemetry_action="purge")
     telemetry_export = telemetry_sub.add_parser("export", help="Export aggregated telemetry summary")
     telemetry_export.add_argument("--range", default="7d", help="Range window like 7d or 24h")
@@ -105,14 +117,25 @@ def main() -> int:
 
     args = parser.parse_args()
     service = _service()
+    trace_id = f"cli:{uuid4()}"
 
     if args.command == "plan":
-        plan = service.get_daily_plan(
-            date.fromisoformat(args.date),
-            source="cli",
-            actor="human",
-            actor_id=args.actor_id,
-        )
+        if args.weekly:
+            plan = service.get_weekly_plan(
+                date.fromisoformat(args.date),
+                source="cli",
+                actor="human",
+                actor_id=args.actor_id,
+                trace_id=trace_id,
+            )
+        else:
+            plan = service.get_daily_plan(
+                date.fromisoformat(args.date),
+                source="cli",
+                actor="human",
+                actor_id=args.actor_id,
+                trace_id=trace_id,
+            )
         _print_plan(plan)
         return 0
 
@@ -124,6 +147,7 @@ def main() -> int:
             actor_mode=args.actor,
             source="cli",
             actor_id=args.actor_id,
+            trace_id=trace_id,
         )
         print(json.dumps(result, indent=2))
         return 0
@@ -166,6 +190,7 @@ def main() -> int:
                 source="cli",
                 actor="human",
                 actor_id=args.actor_id,
+                trace_id=trace_id,
             )
             print(json.dumps(result, indent=2))
             return 0
@@ -176,6 +201,19 @@ def main() -> int:
                 source="cli",
                 actor="human",
                 actor_id=args.actor_id,
+                trace_id=trace_id,
+            )
+            print(json.dumps(result, indent=2))
+            return 0
+
+    if args.command == "proofs":
+        if args.proofs_command == "purge":
+            result = service.proofs_purge(
+                older_than=args.older_than,
+                source="cli",
+                actor="human",
+                actor_id=args.actor_id,
+                trace_id=trace_id,
             )
             print(json.dumps(result, indent=2))
             return 0
@@ -184,8 +222,23 @@ def main() -> int:
         if args.telemetry_command == "status":
             print(json.dumps(service.telemetry_status(), indent=2))
             return 0
+        if args.telemetry_command == "verify":
+            result = service.telemetry_verify()
+            print(json.dumps(result, indent=2))
+            return 0 if result.get("ok") else 1
         if args.telemetry_command == "purge":
-            print(json.dumps(service.telemetry_purge(), indent=2))
+            print(
+                json.dumps(
+                    service.telemetry_purge(
+                        older_than=args.older_than,
+                        source="cli",
+                        actor="human",
+                        actor_id=args.actor_id,
+                        trace_id=trace_id,
+                    ),
+                    indent=2,
+                )
+            )
             return 0
         if args.telemetry_command == "export":
             summary = service.telemetry_export(args.range, Path(args.out), actor_id=args.actor_id)

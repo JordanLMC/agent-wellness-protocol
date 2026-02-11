@@ -300,7 +300,8 @@ Under the hood, the summary should be backed by:
 For MVP, keep it minimal:
 - Streaks + XP + badges.
 - Proof tiers implemented as metadata.
-- Trust signals as simple “signed JSON” later (optional).
+- Trust signals remain separate from XP and are emitted only from explicit quest+tier rules with TTL/expiry metadata.
+- Trust signal validity is time-bounded and never treated as authority.
 
 Avoid early complexity:
 - token/coin mechanics

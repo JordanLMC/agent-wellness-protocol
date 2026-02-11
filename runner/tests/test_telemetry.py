@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import json
 import os
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
 from clawspa_runner.service import RunnerService
-from clawspa_runner.telemetry import TelemetryLogger, sanitize_event_data, summary_sha256
+from clawspa_runner.telemetry import GENESIS_PREV_HASH, TelemetryLogger, _event_hash, sanitize_event_data, summary_sha256
 
 
 def _repo_root() -> Path:
@@ -291,3 +291,128 @@ def test_telemetry_diff_rejects_invalid_summary_schema(tmp_path: Path) -> None:
         assert False, "Expected schema validation failure"
     except ValueError:
         assert True
+
+
+def test_hash_chain_verify_reports_ok_for_valid_log(tmp_path: Path) -> None:
+    events_path = tmp_path / "telemetry" / "events.jsonl"
+    logger = TelemetryLogger(events_path=events_path, repo_root=_repo_root())
+    logger.log_event("runner.started", actor="system", source="cli", data={"session": "ok"}, trace_id="cli:t1")
+    logger.log_event(
+        "plan.generated",
+        actor="human",
+        actor_id="human:jordan",
+        source="api",
+        data={"date": "2026-02-11", "quest_ids": ["q1"], "quest_count": 1},
+        trace_id="api:t2",
+    )
+
+    result = logger.verify_chain()
+    assert result["ok"] is True
+    assert result["checked_events"] == 2
+
+
+def test_hash_chain_verify_detects_tampering(tmp_path: Path) -> None:
+    events_path = tmp_path / "telemetry" / "events.jsonl"
+    logger = TelemetryLogger(events_path=events_path, repo_root=_repo_root())
+    logger.log_event("runner.started", actor="system", source="cli", data={"session": "ok"})
+
+    rows = _read_jsonl(events_path)
+    rows[0]["event_type"] = "quest.completed"
+    events_path.write_text("\n".join(json.dumps(row) for row in rows) + "\n", encoding="utf-8")
+
+    result = logger.verify_chain()
+    assert result["ok"] is False
+    assert result["reason"] == "event_hash_mismatch"
+
+
+def test_purge_older_than_archives_and_keeps_chain_valid(tmp_path: Path) -> None:
+    events_path = tmp_path / "telemetry" / "events.jsonl"
+    logger = TelemetryLogger(events_path=events_path, repo_root=_repo_root())
+
+    old_payload = {
+        "schema_version": "0.1",
+        "event_id": "old-1",
+        "ts": "2024-01-01T00:00:00Z",
+        "event_type": "runner.started",
+        "actor": {"kind": "system", "id": "system:runner"},
+        "source": "cli",
+        "trace_id": "cli:old",
+        "build": {},
+        "data": {"session": "old"},
+    }
+    old_payload["prev_hash"] = GENESIS_PREV_HASH
+    old_payload["event_hash"] = _event_hash(GENESIS_PREV_HASH, old_payload)
+
+    recent_payload = {
+        "schema_version": "0.1",
+        "event_id": "new-1",
+        "ts": datetime.now(tz=UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+        "event_type": "plan.generated",
+        "actor": {"kind": "human", "id": "human:jordan"},
+        "source": "api",
+        "trace_id": "api:new",
+        "build": {},
+        "data": {"date": "2026-02-11", "quest_ids": ["q1"], "quest_count": 1},
+    }
+    recent_payload["prev_hash"] = old_payload["event_hash"]
+    recent_payload["event_hash"] = _event_hash(old_payload["event_hash"], recent_payload)
+
+    events_path.parent.mkdir(parents=True, exist_ok=True)
+    events_path.write_text(json.dumps(old_payload) + "\n" + json.dumps(recent_payload) + "\n", encoding="utf-8")
+
+    result = logger.purge_older_than(timedelta(days=30))
+    assert result["purged_count"] == 1
+    assert result["kept_count"] == 1
+    assert result["archive_path"] is not None
+    assert Path(result["archive_path"]).exists()
+
+    verify = logger.verify_chain()
+    assert verify["ok"] is True
+    assert verify["checked_events"] == 1
+
+
+def test_export_summary_includes_pillar_and_pack_analytics(tmp_path: Path) -> None:
+    events_path = tmp_path / "telemetry" / "events.jsonl"
+    logger = TelemetryLogger(events_path=events_path, repo_root=_repo_root())
+    logger.log_event(
+        "quest.completed",
+        actor="agent",
+        actor_id="openclaw:moltfred",
+        source="mcp",
+        trace_id="mcp:t1",
+        data={
+            "quest_id": "wellness.security_access_control.permissions.delta_inventory.v1",
+            "pack_id": "wellness.security_access_control.v0",
+            "pillars": ["Security & Access Control"],
+            "proof_tier": "P1",
+            "xp_awarded": 20,
+            "timebox_estimate_minutes": 10,
+            "observed_duration_seconds": 120,
+        },
+    )
+    logger.log_event(
+        "quest.failed",
+        actor="agent",
+        actor_id="openclaw:moltfred",
+        source="mcp",
+        trace_id="mcp:t2",
+        data={
+            "quest_id": "wellness.security_access_control.permissions.delta_inventory.v1",
+            "pillars": ["Security & Access Control"],
+            "reason": "validation_error",
+        },
+    )
+    logger.log_event(
+        "risk.flagged",
+        actor="system",
+        source="api",
+        trace_id="api:t3",
+        data={"reason": "artifact_blocked", "pillars": ["Security & Access Control"]},
+    )
+
+    summary = logger.export_summary(range_value="7d", score_state={"daily_streak": 1, "weekly_streak": 1, "total_xp": 20})
+    assert summary["completions_by_pillar"]["Security & Access Control"] == 1
+    assert summary["xp_by_pillar"]["Security & Access Control"] == 20
+    assert summary["completions_by_pack"]["wellness.security_access_control.v0"] == 1
+    assert summary["risk_flags_by_pillar"]["Security & Access Control"] == 1
+    assert summary["quest_success_rate_by_pillar"]["Security & Access Control"] == 0.5

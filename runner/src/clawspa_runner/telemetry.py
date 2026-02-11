@@ -32,11 +32,14 @@ VALID_EVENT_TYPES = {
     "capability.granted",
     "capability.revoked",
     "risk.flagged",
+    "telemetry.purged",
+    "trust_signal.updated",
 }
 VALID_ACTOR_KINDS = {"human", "agent", "system"}
 VALID_SOURCES = {"cli", "api", "mcp"}
 MAX_STRING_LENGTH = 200
 RANGE_PATTERN = re.compile(r"^(\d+)([dh])$")
+GENESIS_PREV_HASH = "0" * 64
 
 
 def _utc_now() -> datetime:
@@ -62,6 +65,14 @@ def _parse_ts(value: str) -> datetime | None:
 
 def _safe_json(value: Any) -> str:
     return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+
+
+def _event_hash(prev_hash: str, payload: dict[str, Any]) -> str:
+    base = dict(payload)
+    base.pop("prev_hash", None)
+    base.pop("event_hash", None)
+    canonical = _safe_json(base)
+    return hashlib_sha256_hex(f"{prev_hash}:{canonical}")
 
 
 def _strip_control_chars(value: str) -> str:
@@ -269,14 +280,37 @@ class TelemetryLogger:
             python_version=sys.version.split()[0],
             platform=platform.platform(),
         )
+        self._last_hash = self._derive_last_hash()
 
     def _normalize_source(self, source: str) -> str:
         if source in VALID_SOURCES:
             return source
         return "cli"
 
+    def _derive_last_hash(self) -> str:
+        prev_hash = GENESIS_PREV_HASH
+        if not self.events_path.exists():
+            return prev_hash
+        with self.events_path.open("r", encoding="utf-8") as handle:
+            for line in handle:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    payload = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if not isinstance(payload, dict):
+                    continue
+                prev_hash = _event_hash(prev_hash, payload)
+        return prev_hash
+
     def _append_jsonl(self, payload: dict[str, Any]) -> None:
         self.events_path.parent.mkdir(parents=True, exist_ok=True)
+        payload = dict(payload)
+        payload["prev_hash"] = self._last_hash
+        payload["event_hash"] = _event_hash(self._last_hash, payload)
+        self._last_hash = payload["event_hash"]
         with self.events_path.open("a", encoding="utf-8", newline="\n") as handle:
             handle.write(_safe_json(payload))
             handle.write("\n")
@@ -289,6 +323,7 @@ class TelemetryLogger:
         actor_id: str | None,
         source: str,
         data: dict[str, Any],
+        trace_id: str | None = None,
     ) -> dict[str, Any]:
         requested_event_type = event_type
         if requested_event_type not in VALID_EVENT_TYPES:
@@ -305,6 +340,7 @@ class TelemetryLogger:
             "event_type": event_type,
             "actor": actor_model,
             "source": self._normalize_source(source),
+            "trace_id": sanitize_actor_id(trace_id) if trace_id is not None else None,
             "build": self.build.to_dict(),
             "data": data,
         }
@@ -317,6 +353,7 @@ class TelemetryLogger:
         source: str,
         data: dict[str, Any],
         actor_id: str | None = None,
+        trace_id: str | None = None,
         _emit_sanitize_flag: bool = True,
     ) -> None:
         """Write one sanitized event and optional sanitization risk flag."""
@@ -329,6 +366,7 @@ class TelemetryLogger:
                 actor_id=actor_id,
                 source=source,
                 data=sanitized_data if isinstance(sanitized_data, dict) else {"value": sanitized_data},
+                trace_id=trace_id,
             )
             self._append_jsonl(event_payload)
             if _emit_sanitize_flag and (stats.redacted_fields or stats.truncated_fields):
@@ -337,6 +375,7 @@ class TelemetryLogger:
                     actor="system",
                     actor_id=actor_id,
                     source=source,
+                    trace_id=trace_id,
                     data={
                         "reason": "telemetry_sanitized",
                         "trigger_event_type": event_type,
@@ -379,7 +418,138 @@ class TelemetryLogger:
         if not self.events_path.exists():
             return False
         self.events_path.unlink()
+        self._last_hash = GENESIS_PREV_HASH
         return True
+
+    def verify_chain(self) -> dict[str, Any]:
+        """Verify telemetry hash-chain integrity and report first break, if any."""
+
+        if not self.events_path.exists():
+            return {"ok": True, "checked_events": 0, "broken_index": None, "reason": None}
+
+        prev_hash = GENESIS_PREV_HASH
+        checked = 0
+        with self.events_path.open("r", encoding="utf-8") as handle:
+            for line_idx, raw_line in enumerate(handle):
+                line = raw_line.strip()
+                if not line:
+                    continue
+                try:
+                    payload = json.loads(line)
+                except json.JSONDecodeError:
+                    return {
+                        "ok": False,
+                        "checked_events": checked,
+                        "broken_index": line_idx,
+                        "reason": "invalid_json_line",
+                    }
+                if not isinstance(payload, dict):
+                    return {
+                        "ok": False,
+                        "checked_events": checked,
+                        "broken_index": line_idx,
+                        "reason": "invalid_event_shape",
+                    }
+                if "prev_hash" not in payload or "event_hash" not in payload:
+                    return {
+                        "ok": False,
+                        "checked_events": checked,
+                        "broken_index": line_idx,
+                        "reason": "missing_hash_fields",
+                    }
+                expected_prev = str(payload.get("prev_hash"))
+                if expected_prev != prev_hash:
+                    return {
+                        "ok": False,
+                        "checked_events": checked,
+                        "broken_index": line_idx,
+                        "reason": "prev_hash_mismatch",
+                    }
+                expected_hash = _event_hash(prev_hash, payload)
+                event_hash = str(payload.get("event_hash"))
+                if event_hash != expected_hash:
+                    return {
+                        "ok": False,
+                        "checked_events": checked,
+                        "broken_index": line_idx,
+                        "reason": "event_hash_mismatch",
+                    }
+                prev_hash = event_hash
+                checked += 1
+        return {"ok": True, "checked_events": checked, "broken_index": None, "reason": None}
+
+    def purge_older_than(self, older_than: timedelta) -> dict[str, Any]:
+        """Purge telemetry events older than a relative threshold and keep chain valid."""
+
+        if older_than <= timedelta(0):
+            raise ValueError("older_than must be positive.")
+        if not self.events_path.exists():
+            return {
+                "path": str(self.events_path),
+                "purged_count": 0,
+                "kept_count": 0,
+                "archive_path": None,
+                "archive_sha256": None,
+            }
+
+        cutoff = _utc_now() - older_than
+        kept: list[dict[str, Any]] = []
+        purged: list[dict[str, Any]] = []
+        with self.events_path.open("r", encoding="utf-8") as handle:
+            for line in handle:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    payload = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if not isinstance(payload, dict):
+                    continue
+                parsed_ts = _parse_ts(payload.get("ts"))
+                if parsed_ts is None:
+                    kept.append(payload)
+                    continue
+                if parsed_ts < cutoff:
+                    purged.append(payload)
+                else:
+                    kept.append(payload)
+
+        if not purged:
+            return {
+                "path": str(self.events_path),
+                "purged_count": 0,
+                "kept_count": len(kept),
+                "archive_path": None,
+                "archive_sha256": None,
+            }
+
+        archive_dir = self.events_path.parent / "archive"
+        archive_dir.mkdir(parents=True, exist_ok=True)
+        stamp = _utc_now().strftime("%Y%m%dT%H%M%SZ")
+        archive_path = archive_dir / f"events-purged-{stamp}.jsonl"
+        with archive_path.open("w", encoding="utf-8", newline="\n") as handle:
+            for item in purged:
+                handle.write(_safe_json(item))
+                handle.write("\n")
+        archive_sha256 = hashlib_sha256_hex(archive_path.read_text(encoding="utf-8"))
+
+        self._last_hash = GENESIS_PREV_HASH
+        with self.events_path.open("w", encoding="utf-8", newline="\n"):
+            pass
+        for item in kept:
+            row = dict(item)
+            row.pop("prev_hash", None)
+            row.pop("event_hash", None)
+            self._append_jsonl(row)
+
+        return {
+            "path": str(self.events_path),
+            "purged_count": len(purged),
+            "kept_count": len(kept),
+            "archive_path": str(archive_path),
+            "archive_sha256": archive_sha256,
+        }
 
     def export_summary(
         self,
@@ -418,6 +588,46 @@ class TelemetryLogger:
         plans = [evt for evt in in_window if evt.get("event_type") == "plan.generated"]
         flags = [evt for evt in in_window if evt.get("event_type") == "risk.flagged"]
 
+        quest_pillars_by_id: dict[str, list[str]] = {}
+        quest_pack_by_id: dict[str, str] = {}
+        for event in completions:
+            data = event.get("data", {})
+            if not isinstance(data, dict):
+                continue
+            quest_id = data.get("quest_id")
+            if not isinstance(quest_id, str) or not quest_id:
+                continue
+            pillars = [str(item) for item in data.get("pillars", []) if isinstance(item, str) and item]
+            if pillars:
+                quest_pillars_by_id[quest_id] = pillars
+            pack_id = data.get("pack_id")
+            if isinstance(pack_id, str) and pack_id:
+                quest_pack_by_id[quest_id] = pack_id
+
+        def _resolve_pillars(event: dict[str, Any]) -> list[str]:
+            data = event.get("data", {})
+            if isinstance(data, dict):
+                pillars = data.get("pillars", [])
+                if isinstance(pillars, list):
+                    normalized = [str(item) for item in pillars if isinstance(item, str) and item]
+                    if normalized:
+                        return normalized
+                quest_id = data.get("quest_id")
+                if isinstance(quest_id, str) and quest_id in quest_pillars_by_id:
+                    return quest_pillars_by_id[quest_id]
+            return ["Unknown"]
+
+        def _resolve_pack(event: dict[str, Any]) -> str:
+            data = event.get("data", {})
+            if isinstance(data, dict):
+                pack_id = data.get("pack_id")
+                if isinstance(pack_id, str) and pack_id:
+                    return pack_id
+                quest_id = data.get("quest_id")
+                if isinstance(quest_id, str):
+                    return quest_pack_by_id.get(quest_id, "unknown")
+            return "unknown"
+
         events_by_actor_kind = Counter(normalized_actors[id(evt)]["kind"] for evt in in_window)
         events_by_actor_id = Counter(normalized_actors[id(evt)]["id"] for evt in in_window)
         completions_by_actor_kind = Counter(normalized_actors[id(evt)]["kind"] for evt in completions)
@@ -429,6 +639,31 @@ class TelemetryLogger:
         failures_by_reason = Counter(str(evt.get("data", {}).get("reason", "unknown")) for evt in failures)
         quest_counts = Counter(str(evt.get("data", {}).get("quest_id", "")) for evt in completions)
         quest_counts.pop("", None)
+        completions_by_pillar: Counter[str] = Counter()
+        xp_by_pillar: Counter[str] = Counter()
+        completions_by_pack: Counter[str] = Counter()
+        risk_flags_by_pillar: Counter[str] = Counter()
+        attempts_by_pillar: Counter[str] = Counter()
+        successes_by_pillar: Counter[str] = Counter()
+
+        for event in completions:
+            data = event.get("data", {})
+            awarded = int(data.get("xp_awarded", 0)) if isinstance(data, dict) else 0
+            pack_id = _resolve_pack(event)
+            completions_by_pack[pack_id] += 1
+            for pillar in _resolve_pillars(event):
+                completions_by_pillar[pillar] += 1
+                xp_by_pillar[pillar] += awarded
+                successes_by_pillar[pillar] += 1
+                attempts_by_pillar[pillar] += 1
+
+        for event in failures:
+            for pillar in _resolve_pillars(event):
+                attempts_by_pillar[pillar] += 1
+
+        for event in flags:
+            for pillar in _resolve_pillars(event):
+                risk_flags_by_pillar[pillar] += 1
 
         plans_generated = len(plans)
         quest_count_sum = sum(int(evt.get("data", {}).get("quest_count", 0)) for evt in plans)
@@ -439,6 +674,11 @@ class TelemetryLogger:
         observed_duration_sum = sum(
             int(evt.get("data", {}).get("observed_duration_seconds", 0)) for evt in completions
         )
+        quest_success_rate_by_pillar = {
+            pillar: round((successes_by_pillar[pillar] / attempts_by_pillar[pillar]), 4)
+            for pillar in sorted(attempts_by_pillar)
+            if attempts_by_pillar[pillar] > 0
+        }
 
         summary = {
             "schema_version": SCHEMA_VERSION,
@@ -456,14 +696,19 @@ class TelemetryLogger:
             "completions_by_actor_id": dict(sorted(completions_by_actor_id.items())),
             "completions_by_source": dict(sorted(completions_by_source.items())),
             "completions_by_proof_tier": dict(sorted(completions_by_proof_tier.items())),
+            "completions_by_pillar": dict(sorted(completions_by_pillar.items())),
+            "xp_by_pillar": dict(sorted(xp_by_pillar.items())),
+            "completions_by_pack": dict(sorted(completions_by_pack.items())),
             "daily_streak": int(score_state.get("daily_streak", 0)),
             "weekly_streak": int(score_state.get("weekly_streak", 0)),
             "total_xp": int(score_state.get("total_xp", 0)),
             "plans_generated": plans_generated,
             "avg_quests_per_plan": round((quest_count_sum / plans_generated), 3) if plans_generated else 0.0,
             "quest_success_rate": round((len(completions) / attempts), 4) if attempts else 0.0,
+            "quest_success_rate_by_pillar": quest_success_rate_by_pillar,
             "failures_by_reason": dict(sorted(failures_by_reason.items())),
             "risk_flags_count": len(flags),
+            "risk_flags_by_pillar": dict(sorted(risk_flags_by_pillar.items())),
             "top_quests_completed": [
                 {"quest_id": quest_id, "count": count}
                 for quest_id, count in sorted(quest_counts.items(), key=lambda item: (-item[1], item[0]))[:10]
@@ -542,6 +787,19 @@ def diff_aggregated_summaries(a: dict[str, Any], b: dict[str, Any]) -> dict[str,
         keys = sorted(set(left) | set(right))
         return {str(key): int(right.get(key, 0)) - int(left.get(key, 0)) for key in keys}
 
+    def _counter_delta_float(field: str, ndigits: int = 4) -> dict[str, float]:
+        left = a.get(field, {})
+        right = b.get(field, {})
+        if not isinstance(left, dict):
+            left = {}
+        if not isinstance(right, dict):
+            right = {}
+        keys = sorted(set(left) | set(right))
+        return {
+            str(key): round(float(right.get(key, 0.0)) - float(left.get(key, 0.0)), ndigits)
+            for key in keys
+        }
+
     def _top_quest_delta() -> list[dict[str, Any]]:
         def _to_counter(node: Any) -> dict[str, int]:
             if not isinstance(node, list):
@@ -587,6 +845,11 @@ def diff_aggregated_summaries(a: dict[str, Any], b: dict[str, Any]) -> dict[str,
             "risk_flags_count_delta": _delta_int("risk_flags_count"),
             "quest_success_rate_delta": _delta_float("quest_success_rate"),
             "completions_by_actor_id_delta": _counter_delta("completions_by_actor_id"),
+            "completions_by_pillar_delta": _counter_delta("completions_by_pillar"),
+            "xp_by_pillar_delta": _counter_delta("xp_by_pillar"),
+            "completions_by_pack_delta": _counter_delta("completions_by_pack"),
+            "risk_flags_by_pillar_delta": _counter_delta("risk_flags_by_pillar"),
+            "quest_success_rate_by_pillar_delta": _counter_delta_float("quest_success_rate_by_pillar"),
             "top_quests_completed_delta": _top_quest_delta(),
         },
     }
@@ -610,6 +873,12 @@ def render_summary_diff_text(diff_payload: dict[str, Any]) -> str:
         f"Risk flags delta: {changes.get('risk_flags_count_delta', 0)}",
         f"Quest success rate delta: {changes.get('quest_success_rate_delta', 0.0)}",
     ]
+    pillar_delta = changes.get("completions_by_pillar_delta", {})
+    if isinstance(pillar_delta, dict) and pillar_delta:
+        top_pillars = sorted(pillar_delta.items(), key=lambda item: (-abs(int(item[1])), str(item[0])))[:3]
+        lines.append("Top pillar completion deltas:")
+        for pillar, delta in top_pillars:
+            lines.append(f"- {pillar}: delta {delta}")
     if top_deltas:
         lines.append("Top quest deltas:")
         for row in top_deltas[:5]:

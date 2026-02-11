@@ -350,3 +350,38 @@ def test_security_access_control_pack_manifest_and_checksums_pass() -> None:
     assert sorted(manifest["pack"]["quests"]) == sorted(quest_ids)
     assert len(set(quest_ids)) == len(quest_ids)
     assert high_risk_with_confirm >= 1
+
+
+def test_new_pillar_packs_manifest_and_checksums_pass() -> None:
+    expected_counts = {
+        "wellness.reliability_robustness.v0": 12,
+        "wellness.privacy_data_governance.v0": 12,
+        "wellness.transparency_auditability.v0": 20,
+        "wellness.tool_integration_hygiene.v0": 12,
+        "wellness.continuous_governance_oversight.v0": 12,
+    }
+    for pack_name, expected_count in expected_counts.items():
+        pack_dir = REPO_ROOT / "quests" / "packs" / pack_name
+        findings = lint_path(pack_dir, docs_dir=DOCS_DIR)
+        assert findings == []
+
+        manifest = yaml.safe_load((pack_dir / "pack.yaml").read_text(encoding="utf-8"))
+        quest_files = sorted((pack_dir / "quests").glob("*.quest.yaml"))
+        quest_ids = []
+        high_risk_with_confirm = 0
+        for file_path in quest_files:
+            quest_data = yaml.safe_load(file_path.read_text(encoding="utf-8"))
+            quest = quest_data["quest"]
+            quest_ids.append(quest["id"])
+            multipliers = quest["scoring"]["proof_multiplier"]
+            values = [float(multipliers[tier]) for tier in ("P0", "P1", "P2", "P3")]
+            assert values == sorted(values), f"proof_multiplier is not monotonic in {file_path.name}: {values}"
+            if quest.get("risk_level") in {"high", "critical"}:
+                human_steps = quest.get("steps", {}).get("human", [])
+                assert any(step.get("type") == "confirm" for step in human_steps)
+                high_risk_with_confirm += 1
+
+        assert len(quest_files) == expected_count
+        assert sorted(manifest["pack"]["quests"]) == sorted(quest_ids)
+        assert len(set(quest_ids)) == len(quest_ids)
+        assert high_risk_with_confirm >= 1

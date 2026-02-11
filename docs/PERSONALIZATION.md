@@ -165,7 +165,7 @@ Inputs:
 - “risk footprint” score (capability-weighted)
 
 Outputs:
-- daily quest set (3–5 quests)
+- daily quest set (3–5 quests, cadence-aware)
 - weekly quest set (2–3 quests)
 
 Example heuristic:
@@ -173,6 +173,7 @@ Example heuristic:
   - Security & Access Control
   - Memory & Context Hygiene
   - Identity & Purpose
+- If weekly/monthly quests are due, include at least one due item in the daily mix when feasible.
 - If risk footprint high, add a 4th security quest.
 - If completion drop-off, reduce difficulty and rotate to easier quests.
 
