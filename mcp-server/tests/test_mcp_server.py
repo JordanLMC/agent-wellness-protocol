@@ -63,6 +63,18 @@ def test_validate_tool_arguments_rejects_secret_like_submit_proof() -> None:
         )
 
 
+def test_validate_tool_arguments_rejects_path_like_proof_ref() -> None:
+    with pytest.raises(ValueError, match="path separators"):
+        validate_tool_arguments(
+            "submit_proof",
+            {
+                "quest_id": "wellness.identity.anchor.mission_statement.v1",
+                "tier": "P1",
+                "artifacts": [{"ref": "nested/path/ref"}],
+            },
+        )
+
+
 def test_validate_tool_arguments_rejects_large_profile_patch() -> None:
     large_patch = {"notes": "a" * 9000}
     with pytest.raises(ValueError, match="exceeds"):
@@ -72,6 +84,19 @@ def test_validate_tool_arguments_rejects_large_profile_patch() -> None:
 def test_validate_tool_arguments_rejects_secret_profile_patch() -> None:
     with pytest.raises(ValueError, match="secret-like"):
         validate_tool_arguments("update_agent_profile", {"profile_patch": {"token": "sk-abcdefghijklmnop"}})
+
+
+def test_validate_tool_arguments_submit_feedback_rejects_secret_details() -> None:
+    with pytest.raises(ValueError, match="secret-like"):
+        validate_tool_arguments(
+            "submit_feedback",
+            {
+                "severity": "medium",
+                "component": "proofs",
+                "title": "Proof issue",
+                "details": "sk-abcdefghijklmnop",
+            },
+        )
 
 
 def test_mcp_request_sets_source_headers(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -132,3 +157,40 @@ def test_mcp_tool_actor_id_override(monkeypatch: pytest.MonkeyPatch) -> None:
     )
     assert captured["actor_id"] == "openclaw:moltfred"
     assert captured["trace_id"] == "mcp:manual-trace"
+
+
+def test_mcp_submit_feedback_calls_feedback_endpoint(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: dict[str, str] = {}
+
+    class _DummyResponse:
+        def __enter__(self) -> "_DummyResponse":
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> bool:
+            return False
+
+        def read(self) -> bytes:
+            return b"{}"
+
+    def _fake_urlopen(request, timeout=10):  # noqa: ANN001
+        captured["url"] = request.full_url
+        headers = {key.lower(): value for key, value in request.header_items()}
+        captured["trace_id"] = headers.get("x-clawspa-trace-id")
+        captured["body"] = request.data.decode("utf-8")
+        return _DummyResponse()
+
+    monkeypatch.setattr("clawspa_mcp.server.urlopen", _fake_urlopen)
+    bridge = MCPBridge("http://127.0.0.1:8000", actor_id="openclaw:moltfred")
+    bridge.call_tool(
+        "submit_feedback",
+        {
+            "severity": "low",
+            "component": "proofs",
+            "title": "UX note",
+            "summary": "short ref guidance helped",
+            "trace_id": "mcp:feedback-test",
+        },
+    )
+    assert captured["url"].endswith("/v1/feedback")
+    assert captured["trace_id"] == "mcp:feedback-test"
+    assert "\"component\": \"proofs\"" in captured["body"]

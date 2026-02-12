@@ -39,6 +39,8 @@ def test_daily_plan_endpoint(tmp_path: Path) -> None:
     assert response.status_code == 200
     payload = response.json()
     assert len(payload["quest_ids"]) >= 3
+    assert "quest_metadata" in payload
+    assert all("required_proof_tier" in item for item in payload["quest_metadata"])
 
 
 def test_weekly_plan_endpoints(tmp_path: Path) -> None:
@@ -51,7 +53,10 @@ def test_weekly_plan_endpoints(tmp_path: Path) -> None:
 
     generate_response = client.post("/v1/plans/weekly/generate", params={"date": "2026-02-11"})
     assert generate_response.status_code == 200
-    assert len(generate_response.json()["quest_ids"]) >= 1
+    generated = generate_response.json()
+    assert len(generated["quest_ids"]) >= 1
+    assert generated["quest_metadata"]
+    assert all("artifacts" in item for item in generated["quest_metadata"])
 
 
 def test_quests_search_route_not_shadowed(tmp_path: Path) -> None:
@@ -452,6 +457,91 @@ def test_list_proofs_invalid_date_range_rejected(tmp_path: Path) -> None:
     _, client = _service_and_client(tmp_path)
     response = client.get("/v1/proofs", params={"date_range": "2026/01/01-2026/02/01"})
     assert response.status_code == 400
+
+
+def test_proof_submission_rejects_long_ref_with_structured_error(tmp_path: Path) -> None:
+    _, client = _service_and_client(tmp_path)
+    long_ref = "a" * 140
+    response = client.post(
+        "/v1/proofs",
+        headers={"X-Clawspa-Trace-Id": "mcp:proof-ref-invalid"},
+        json={
+            "quest_id": "wellness.identity.anchor.mission_statement.v1",
+            "tier": "P0",
+            "artifacts": [{"ref": long_ref, "summary": "long context goes here"}],
+            "mode": "agent",
+        },
+    )
+    assert response.status_code == 400
+    payload = response.json()
+    assert payload["code"] == "PROOF_REF_INVALID"
+    assert "summary" in payload["message"].lower()
+    assert response.headers.get("x-clawspa-trace-id") == "mcp:proof-ref-invalid"
+
+
+def test_proof_submission_tier_too_low_returns_structured_error(tmp_path: Path) -> None:
+    _, client = _service_and_client(tmp_path)
+    response = client.post(
+        "/v1/proofs",
+        headers={"X-Clawspa-Trace-Id": "mcp:proof-tier-low"},
+        json={
+            "quest_id": "wellness.security.supply_chain.provenance_review.v1",
+            "tier": "P1",
+            "artifacts": [{"ref": "provenance-review", "summary": "sanitized summary"}],
+            "mode": "agent",
+        },
+    )
+    assert response.status_code == 400
+    payload = response.json()
+    assert payload["code"] == "PROOF_TIER_TOO_LOW"
+    assert payload["required_tier"] == "P2"
+    assert payload["provided_tier"] == "P1"
+    assert response.headers.get("x-clawspa-trace-id") == "mcp:proof-tier-low"
+    events = _events(tmp_path)
+    rejected = [event for event in events if event.get("event_type") == "proof.rejected"]
+    assert rejected
+    data = rejected[-1].get("data", {})
+    assert data.get("required_tier") == "P2"
+    assert data.get("provided_tier") == "P1"
+
+
+def test_feedback_post_and_summary_emit_actor_trace_metadata(tmp_path: Path) -> None:
+    _, client = _service_and_client(tmp_path)
+    response = client.post(
+        "/v1/feedback",
+        headers={
+            "X-Clawspa-Source": "mcp",
+            "X-Clawspa-Actor": "agent",
+            "X-Clawspa-Actor-Id": "openclaw:moltfred",
+            "X-Clawspa-Trace-Id": "mcp:feedback-1",
+        },
+        json={
+            "severity": "medium",
+            "component": "proofs",
+            "title": "Proof ref confusion",
+            "summary": "Short ref works better",
+            "details": "Token sk-abcdefghijklmnop should be redacted.",
+            "tags": ["ux", "proof"],
+            "links": {"quest_id": "wellness.security.supply_chain.provenance_review.v1"},
+        },
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["actor"]["id"] == "openclaw:moltfred"
+    assert payload["trace_id"] == "mcp:feedback-1"
+    assert payload["details"] == "[redacted]"
+
+    summary = client.get("/v1/feedback/summary", params={"range": "7d", "actor_id": "openclaw:moltfred"})
+    assert summary.status_code == 200
+    summary_payload = summary.json()
+    assert summary_payload["feedback_count"] >= 1
+    assert summary_payload["feedback_by_component"]["proofs"] >= 1
+
+    events = _events(tmp_path)
+    feedback_events = [event for event in events if event.get("event_type") == "feedback.submitted"]
+    assert feedback_events
+    assert feedback_events[-1]["actor"] == {"kind": "agent", "id": "openclaw:moltfred"}
+    assert feedback_events[-1]["trace_id"] == "mcp:feedback-1"
 
 
 def test_scorecard_export_is_redacted(tmp_path: Path) -> None:

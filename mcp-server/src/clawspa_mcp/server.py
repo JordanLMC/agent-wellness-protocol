@@ -22,6 +22,9 @@ DATE_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 MAX_ARTIFACTS = 8
 MAX_STRING_LENGTH = 1024
 MAX_PROFILE_PATCH_BYTES = 8 * 1024
+MAX_ARTIFACT_REF_CHARS = 128
+MAX_ARTIFACT_SUMMARY_CHARS = 4000
+ARTIFACT_REF_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9 ._:-]{0,127}$")
 
 
 TOOL_SCHEMAS = [
@@ -97,6 +100,35 @@ TOOL_SCHEMAS = [
                 "trace_id": {"type": "string"},
             },
             "required": ["profile_patch"],
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "submit_feedback",
+        "description": "Submit sanitized local feedback metadata.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "severity": {"type": "string", "enum": ["info", "low", "medium", "high", "critical"]},
+                "component": {"type": "string", "enum": ["proofs", "planner", "api", "mcp", "telemetry", "quests", "docs", "other"]},
+                "title": {"type": "string"},
+                "summary": {"type": "string"},
+                "details": {"type": "string"},
+                "links": {"type": "object"},
+                "tags": {"type": "array", "items": {"type": "string"}},
+                "actor_id": {"type": "string"},
+                "trace_id": {"type": "string"},
+            },
+            "required": ["severity", "component", "title"],
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "get_feedback_summary",
+        "description": "Get feedback counts by severity/component.",
+        "input_schema": {
+            "type": "object",
+            "properties": {"range": {"type": "string"}, "actor_id": {"type": "string"}, "trace_id": {"type": "string"}},
             "additionalProperties": False,
         },
     },
@@ -187,6 +219,23 @@ class MCPBridge:
             current = self._request("GET", "/v1/profiles/agent", actor_id=actor_id, trace_id=trace_id)
             merged = deep_merge(current, arguments.get("profile_patch", {}))
             return self._request("PUT", "/v1/profiles/agent", body=merged, actor_id=actor_id, trace_id=trace_id)
+        if name == "submit_feedback":
+            payload = {
+                "severity": arguments["severity"],
+                "component": arguments["component"],
+                "title": arguments["title"],
+                "summary": arguments.get("summary", ""),
+                "details": arguments.get("details"),
+                "links": arguments.get("links", {}),
+                "tags": arguments.get("tags", []),
+                "actor_id": actor_id,
+            }
+            return self._request("POST", "/v1/feedback", body=payload, actor_id=actor_id, trace_id=trace_id)
+        if name == "get_feedback_summary":
+            params: dict[str, Any] = {"range": arguments.get("range", "7d")}
+            if arguments.get("actor_id"):
+                params["actor_id"] = arguments["actor_id"]
+            return self._request("GET", "/v1/feedback/summary", params=params, actor_id=actor_id, trace_id=trace_id)
         raise ValueError(f"Unknown tool: {name}")
 
 
@@ -280,12 +329,66 @@ def validate_tool_arguments(name: str, arguments: dict[str, Any]) -> None:
             ref = artifact.get("ref")
             if not isinstance(ref, str) or not ref.strip():
                 raise ValueError(f"artifacts[{idx}].ref is required.")
-            _validate_safe_text(ref, field=f"artifacts[{idx}].ref", max_length=512)
+            normalized_ref = ref.strip()
+            if "/" in normalized_ref or "\\" in normalized_ref:
+                raise ValueError(f"artifacts[{idx}].ref must not include path separators.")
+            if len(normalized_ref) > MAX_ARTIFACT_REF_CHARS or not ARTIFACT_REF_PATTERN.match(normalized_ref):
+                raise ValueError(f"artifacts[{idx}].ref must be a short label (max {MAX_ARTIFACT_REF_CHARS} chars).")
+            _validate_safe_text(normalized_ref, field=f"artifacts[{idx}].ref", max_length=MAX_ARTIFACT_REF_CHARS)
             summary = artifact.get("summary")
             if summary is not None:
                 if not isinstance(summary, str):
                     raise ValueError(f"artifacts[{idx}].summary must be a string.")
-                _validate_safe_text(summary, field=f"artifacts[{idx}].summary", max_length=280)
+                _validate_safe_text(summary, field=f"artifacts[{idx}].summary", max_length=MAX_ARTIFACT_SUMMARY_CHARS)
+        return
+    if name == "submit_feedback":
+        severity = arguments.get("severity")
+        component = arguments.get("component")
+        title = arguments.get("title")
+        if severity not in {"info", "low", "medium", "high", "critical"}:
+            raise ValueError("severity must be one of info|low|medium|high|critical.")
+        if component not in {"proofs", "planner", "api", "mcp", "telemetry", "quests", "docs", "other"}:
+            raise ValueError("component must be one of proofs|planner|api|mcp|telemetry|quests|docs|other.")
+        if not isinstance(title, str) or not title.strip():
+            raise ValueError("title is required.")
+        _validate_safe_text(title, field="title", max_length=120)
+        summary = arguments.get("summary")
+        if summary is not None:
+            if not isinstance(summary, str):
+                raise ValueError("summary must be a string.")
+            _validate_safe_text(summary, field="summary", max_length=280)
+        details = arguments.get("details")
+        if details is not None:
+            if not isinstance(details, str):
+                raise ValueError("details must be a string.")
+            _validate_safe_text(details, field="details", max_length=4000)
+        links = arguments.get("links")
+        if links is not None:
+            if not isinstance(links, dict):
+                raise ValueError("links must be an object.")
+            for key, value in links.items():
+                if key not in {"quest_id", "proof_id", "endpoint", "commit", "pr"}:
+                    raise ValueError("links keys must be quest_id|proof_id|endpoint|commit|pr.")
+                if not isinstance(value, str):
+                    raise ValueError("links values must be strings.")
+                _validate_safe_text(value, field=f"links.{key}", max_length=200)
+        tags = arguments.get("tags")
+        if tags is not None:
+            if not isinstance(tags, list):
+                raise ValueError("tags must be an array.")
+            for idx, tag in enumerate(tags):
+                if not isinstance(tag, str):
+                    raise ValueError(f"tags[{idx}] must be a string.")
+                _validate_safe_text(tag, field=f"tags[{idx}]", max_length=40)
+        return
+    if name == "get_feedback_summary":
+        allowed = {"range", "actor_id", "trace_id"}
+        if any(key not in allowed for key in arguments):
+            raise ValueError("get_feedback_summary accepts range, actor_id, and trace_id only.")
+        range_value = arguments.get("range")
+        if range_value is not None:
+            if not isinstance(range_value, str) or not re.match(r"^\d+[dh]$", range_value.strip().lower()):
+                raise ValueError("range must be like 7d or 24h.")
         return
     if name == "update_agent_profile":
         patch = arguments.get("profile_patch")

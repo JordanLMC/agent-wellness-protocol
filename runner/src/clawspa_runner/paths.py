@@ -24,7 +24,16 @@ def ensure_home_dirs(base: Path) -> dict[str, Path]:
     state = base / "state"
     proofs = base / "proofs"
     telemetry = base / "telemetry"
+    feedback = base / "feedback"
     plans = state / "plans"
-    for path in (base, profiles, state, proofs, plans, telemetry):
+    for path in (base, profiles, state, proofs, plans, telemetry, feedback):
         path.mkdir(parents=True, exist_ok=True)
-    return {"base": base, "profiles": profiles, "state": state, "proofs": proofs, "plans": plans, "telemetry": telemetry}
+    return {
+        "base": base,
+        "profiles": profiles,
+        "state": state,
+        "proofs": proofs,
+        "plans": plans,
+        "telemetry": telemetry,
+        "feedback": feedback,
+    }

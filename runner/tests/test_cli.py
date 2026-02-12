@@ -16,6 +16,7 @@ class _DummyService:
         artifact: str,
         *,
         actor_mode: str,
+        artifacts: list[dict] | None = None,
         source: str,
         actor_id: str,
         trace_id: str | None,

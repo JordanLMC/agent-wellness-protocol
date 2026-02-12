@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Scan repository files for bidi and invisible Unicode control characters."""
+"""Scan repository files for bidi and hidden/invisible Unicode characters."""
 
 from __future__ import annotations
 
@@ -30,6 +30,8 @@ EXPLICIT_SUSPICIOUS_CODEPOINTS = {
     0x2069,  # POP DIRECTIONAL ISOLATE
     0xFEFF,  # ZERO WIDTH NO-BREAK SPACE/BOM
 }
+ALLOWED_CONTROL_CHARS = {"\n", "\r", "\t"}
+ALLOWED_SPACE_CODEPOINT = 0x0020
 
 SKIP_DIRS = {
     ".git",
@@ -44,25 +46,55 @@ SKIP_DIRS = {
 
 def is_suspicious_char(char: str) -> bool:
     codepoint = ord(char)
-    return codepoint in EXPLICIT_SUSPICIOUS_CODEPOINTS or unicodedata.category(char) == "Cf"
-
-
-def escaped_snippet(line: str, column: int, radius: int = 24) -> str:
-    start = max(0, column - 1 - radius)
-    end = min(len(line), column - 1 + radius)
-    snippet = line[start:end]
-    escaped = snippet.encode("unicode_escape").decode("ascii")
-    prefix = "..." if start > 0 else ""
-    suffix = "..." if end < len(line) else ""
-    return f"{prefix}{escaped}{suffix}"
+    category = unicodedata.category(char)
+    if codepoint in EXPLICIT_SUSPICIOUS_CODEPOINTS:
+        return True
+    if category == "Cf":
+        return True
+    if category == "Cc" and char not in ALLOWED_CONTROL_CHARS:
+        return True
+    if category in {"Zl", "Zp"}:
+        return True
+    if category == "Zs" and codepoint != ALLOWED_SPACE_CODEPOINT:
+        return True
+    return False
 
 
 def find_controls(text: str) -> list[tuple[int, int, str, str]]:
     findings: list[tuple[int, int, str, str]] = []
-    for line_number, line in enumerate(text.splitlines(), start=1):
-        for column_number, char in enumerate(line, start=1):
-            if is_suspicious_char(char):
-                findings.append((line_number, column_number, char, escaped_snippet(line, column_number)))
+    line_number = 1
+    column_number = 1
+    pending_lf = False
+    for index, char in enumerate(text):
+        if is_suspicious_char(char):
+            start = max(0, index - 24)
+            end = min(len(text), index + 24)
+            context = text[start:end]
+            snippet = context.encode("unicode_escape").decode("ascii")
+            if start > 0:
+                snippet = f"...{snippet}"
+            if end < len(text):
+                snippet = f"{snippet}..."
+            findings.append((line_number, column_number, char, snippet))
+
+        if char == "\r":
+            line_number += 1
+            column_number = 1
+            pending_lf = True
+            continue
+        if char == "\n":
+            if pending_lf:
+                pending_lf = False
+                continue
+            line_number += 1
+            column_number = 1
+            continue
+        pending_lf = False
+        if unicodedata.category(char) in {"Zl", "Zp"}:
+            line_number += 1
+            column_number = 1
+            continue
+        column_number += 1
     return findings
 
 

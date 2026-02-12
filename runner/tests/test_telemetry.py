@@ -103,6 +103,7 @@ def test_export_aggregates_metrics(tmp_path: Path) -> None:
     assert summary["completions_by_actor_id"]["human:jordan"] == 1
     assert summary["completions_by_source"]["mcp"] == 1
     assert summary["events_by_actor_id"]["human:jordan"] >= 1
+    assert summary["feedback_count"] == 0
     assert summary["top_quests_completed"][0]["count"] == 1
 
 
@@ -241,6 +242,9 @@ def test_telemetry_diff_reports_expected_deltas(tmp_path: Path) -> None:
                 "daily_streak": 2,
                 "weekly_streak": 1,
                 "risk_flags_count": 1,
+                "feedback_count": 1,
+                "feedback_by_component": {"proofs": 1},
+                "feedback_by_severity": {"medium": 1},
                 "quest_success_rate": 0.5,
                 "completions_by_actor_id": {"openclaw:moltfred": 1},
                 "top_quests_completed": [{"quest_id": "q1", "count": 1}],
@@ -260,6 +264,9 @@ def test_telemetry_diff_reports_expected_deltas(tmp_path: Path) -> None:
                 "daily_streak": 4,
                 "weekly_streak": 2,
                 "risk_flags_count": 1,
+                "feedback_count": 3,
+                "feedback_by_component": {"proofs": 2, "planner": 1},
+                "feedback_by_severity": {"medium": 2, "high": 1},
                 "quest_success_rate": 0.8,
                 "completions_by_actor_id": {"openclaw:moltfred": 3, "human:jordan": 2},
                 "top_quests_completed": [{"quest_id": "q1", "count": 2}, {"quest_id": "q2", "count": 2}],
@@ -274,6 +281,8 @@ def test_telemetry_diff_reports_expected_deltas(tmp_path: Path) -> None:
     assert changes["total_xp_delta"] == 60
     assert changes["daily_streak_delta"] == 2
     assert changes["quest_success_rate_delta"] == 0.3
+    assert changes["feedback_count_delta"] == 2
+    assert changes["feedback_by_component_delta"]["planner"] == 1
     assert changes["completions_by_actor_id_delta"]["human:jordan"] == 2
     assert "Completions delta: 3" in diff["text"]
 
@@ -416,3 +425,30 @@ def test_export_summary_includes_pillar_and_pack_analytics(tmp_path: Path) -> No
     assert summary["completions_by_pack"]["wellness.security_access_control.v0"] == 1
     assert summary["risk_flags_by_pillar"]["Security & Access Control"] == 1
     assert summary["quest_success_rate_by_pillar"]["Security & Access Control"] == 0.5
+
+
+def test_export_summary_includes_feedback_analytics(tmp_path: Path) -> None:
+    events_path = tmp_path / "telemetry" / "events.jsonl"
+    logger = TelemetryLogger(events_path=events_path, repo_root=_repo_root())
+    logger.log_event(
+        "feedback.submitted",
+        actor="agent",
+        actor_id="openclaw:moltfred",
+        source="mcp",
+        trace_id="mcp:feedback-2",
+        data={"feedback_id": "f1", "severity": "high", "component": "proofs", "tag_count": 2},
+    )
+    logger.log_event(
+        "feedback.submitted",
+        actor="human",
+        actor_id="human:jordan",
+        source="api",
+        trace_id="api:feedback-3",
+        data={"feedback_id": "f2", "severity": "low", "component": "planner", "tag_count": 1},
+    )
+    summary = logger.export_summary(range_value="7d", score_state={"daily_streak": 0, "weekly_streak": 0, "total_xp": 0})
+    assert summary["feedback_count"] == 2
+    assert summary["feedback_by_component"]["planner"] == 1
+    assert summary["feedback_by_component"]["proofs"] == 1
+    assert summary["feedback_by_severity"]["high"] == 1
+    assert summary["feedback_by_severity"]["low"] == 1

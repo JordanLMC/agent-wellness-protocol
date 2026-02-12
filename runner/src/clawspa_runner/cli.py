@@ -50,7 +50,7 @@ def main() -> int:
     complete_cmd = sub.add_parser("complete", help="Record quest completion")
     complete_cmd.add_argument("--quest", required=True, help="Canonical quest ID")
     complete_cmd.add_argument("--tier", required=True, choices=["P0", "P1", "P2", "P3"])
-    complete_cmd.add_argument("--artifact", required=True, help="Artifact path or summary reference")
+    complete_cmd.add_argument("--artifact", required=True, help="Short artifact reference label")
     complete_cmd.add_argument("--actor", default="human", choices=["human", "agent", "system"])
     complete_cmd.add_argument("--actor-id", default=default_actor_id, help="Telemetry actor identifier")
 
@@ -115,6 +115,30 @@ def main() -> int:
     telemetry_diff.add_argument("--out", default=None, help="Optional output path for JSON diff")
     telemetry_diff.add_argument("--format", choices=["text", "json"], default="text", help="Console output format")
 
+    feedback_cmd = sub.add_parser("feedback", help="Feedback intake operations")
+    feedback_sub = feedback_cmd.add_subparsers(dest="feedback_command", required=True)
+    feedback_add = feedback_sub.add_parser("add", help="Submit one local feedback item")
+    feedback_add.add_argument("--severity", required=True, choices=["info", "low", "medium", "high", "critical"])
+    feedback_add.add_argument("--component", required=True, choices=["proofs", "planner", "api", "mcp", "telemetry", "quests", "docs", "other"])
+    feedback_add.add_argument("--title", required=True, help="Short feedback title")
+    feedback_add.add_argument("--summary", default="", help="Short summary text")
+    feedback_add.add_argument("--details-file", default=None, help="Optional path to details text")
+    feedback_add.add_argument("--details-stdin", action="store_true", help="Read details from stdin")
+    feedback_add.add_argument("--tag", action="append", default=[], help="Optional tag (repeatable)")
+    feedback_add.add_argument("--quest-id", default=None)
+    feedback_add.add_argument("--proof-id", default=None)
+    feedback_add.add_argument("--endpoint", default=None)
+    feedback_add.add_argument("--commit", default=None)
+    feedback_add.add_argument("--pr", default=None)
+    feedback_add.add_argument("--actor", default="human", choices=["human", "agent", "system"])
+    feedback_add.add_argument("--actor-id", default=default_actor_id, help="Telemetry actor identifier")
+    feedback_list = feedback_sub.add_parser("list", help="List local feedback entries")
+    feedback_list.add_argument("--range", default="7d", help="Range window like 7d or 24h")
+    feedback_list.add_argument("--actor-id", default=None, help="Optional actor id filter")
+    feedback_summary = feedback_sub.add_parser("summary", help="Summarize feedback counts")
+    feedback_summary.add_argument("--range", default="30d", help="Range window like 30d or 24h")
+    feedback_summary.add_argument("--actor-id", default=None, help="Optional actor id filter")
+
     args = parser.parse_args()
     service = _service()
     trace_id = f"cli:{uuid4()}"
@@ -145,6 +169,7 @@ def main() -> int:
             args.tier,
             args.artifact,
             actor_mode=args.actor,
+            artifacts=[{"ref": args.artifact}],
             source="cli",
             actor_id=args.actor_id,
             trace_id=trace_id,
@@ -272,6 +297,48 @@ def main() -> int:
                 print(diff["text"])
                 if args.out:
                     print(f"JSON diff written to {args.out}")
+            return 0
+
+    if args.command == "feedback":
+        if args.feedback_command == "add":
+            details: str | None = None
+            if args.details_file:
+                details = Path(args.details_file).read_text(encoding="utf-8")
+            elif args.details_stdin:
+                details = sys.stdin.read()
+            links = {
+                key: value
+                for key, value in {
+                    "quest_id": args.quest_id,
+                    "proof_id": args.proof_id,
+                    "endpoint": args.endpoint,
+                    "commit": args.commit,
+                    "pr": args.pr,
+                }.items()
+                if value
+            }
+            result = service.add_feedback(
+                severity=args.severity,
+                component=args.component,
+                title=args.title,
+                summary=args.summary,
+                details=details,
+                links=links,
+                tags=args.tag,
+                source="cli",
+                actor=args.actor,
+                actor_id=args.actor_id,
+                trace_id=trace_id,
+            )
+            print(json.dumps(result, indent=2))
+            return 0
+        if args.feedback_command == "list":
+            result = service.list_feedback(range_value=args.range, actor_id=args.actor_id)
+            print(json.dumps(result, indent=2))
+            return 0
+        if args.feedback_command == "summary":
+            result = service.feedback_summary(range_value=args.range, actor_id=args.actor_id)
+            print(json.dumps(result, indent=2))
             return 0
 
     return 1

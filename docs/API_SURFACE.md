@@ -1,7 +1,7 @@
 # API_SURFACE.md
 Version: v0.1  
 Status: Draft  
-Last updated: 2026-02-11  
+Last updated: 2026-02-12  
 Owner: Project Team  
 
 ## Purpose
@@ -96,16 +96,42 @@ Trace-id behavior:
 - `POST /v1/plans/weekly/generate?date=YYYY-MM-DD`
   - v0.1: rule-based picker
   - later: AI planner selects from curated quests
+  - response includes `quest_metadata` rows per quest with:
+    - `quest_id`
+    - `title`
+    - `pillars`
+    - `risk_level`
+    - `mode`
+    - `required_capabilities`
+    - `required_proof_tier`
+    - `artifacts` (expected proof artifact declarations)
 
 ### Proofs / Completion
 - `POST /v1/proofs`
   - body includes: quest_id, proof tier, artifact refs
+  - `artifacts[].ref` is a short label (not payload content):
+    - max 128 chars
+    - path separators (`/`, `\`) are forbidden
+    - use `artifacts[].summary` for longer text
   - optional body `actor_id` (lower precedence than `X-Clawspa-Actor-Id`)
 - `GET /v1/proofs?quest_id=&date_range=`
   - `date_range` supports:
     - relative window: `7d`, `24h`, etc.
     - absolute range: `YYYY-MM-DD..YYYY-MM-DD`
   - invalid format returns `400`
+
+Proof error codes (HTTP `400`):
+- `PROOF_REF_INVALID`
+  - message: `artifact ref must be short; put long content in summary`
+  - hint includes example short refs
+- `PROOF_TIER_TOO_LOW`
+  - includes `required_tier` and `provided_tier`
+  - message example: `Quest requires P2 minimum`
+
+Unhandled internal errors return HTTP `500` with:
+- `code: INTERNAL_SERVER_ERROR`
+- `trace_id` in body
+- `X-Clawspa-Trace-Id` response header
 
 ### Scorecard
 - `GET /v1/scorecard`
@@ -121,6 +147,23 @@ Trace-id behavior:
   - retention purge by range (older-than) via runner CLI
   - aggregated export/snapshot/diff via runner CLI
 - No raw telemetry event API endpoint is exposed by default.
+
+### Feedback (local-first)
+- `POST /v1/feedback`
+  - stores sanitized feedback in local JSONL (`~/.agentwellness/feedback/feedback.jsonl`)
+  - emits metadata-only telemetry event `feedback.submitted`
+  - payload fields:
+    - `severity`: `info|low|medium|high|critical`
+    - `component`: `proofs|planner|api|mcp|telemetry|quests|docs|other`
+    - `title`, optional `summary`, optional `details`
+    - optional `links` (`quest_id`, `proof_id`, `endpoint`, `commit`, `pr`)
+    - optional `tags`
+    - optional body `actor_id` (lower precedence than `X-Clawspa-Actor-Id`)
+- `GET /v1/feedback?range=7d&actor_id=...&limit=100`
+  - returns sanitized items
+  - max response cap is 100
+- `GET /v1/feedback/summary?range=7d&actor_id=...`
+  - returns aggregate counts by severity/component and top tags
 
 ### Capability grants (Authorized Mode control)
 - `GET /v1/capabilities`
@@ -144,6 +187,8 @@ The MCP server should expose tools that map cleanly to the API:
 - `get_daily_quests(date?)` → `GET /v1/plans/daily`
 - `get_quest(quest_id)` → `GET /v1/quests/{quest_id}`
 - `submit_proof(quest_id, artifacts, tier)` → `POST /v1/proofs`
+- `submit_feedback(severity, component, title, ...)` → `POST /v1/feedback`
+- `get_feedback_summary(range?, actor_id?)` → `GET /v1/feedback/summary`
 - `get_scorecard()` → `GET /v1/scorecard`
 - `get_profiles()` → `GET /v1/profiles/*`
 - `update_agent_profile(profile_patch)` → `PUT /v1/profiles/agent`
