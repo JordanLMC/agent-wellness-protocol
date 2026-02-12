@@ -59,8 +59,44 @@ def test_check_bidi_scans_extensionless_text_files(tmp_path: Path) -> None:
     assert "U+202E" in result.stdout
 
 
+def test_check_bidi_fails_on_nbsp(tmp_path: Path) -> None:
+    (tmp_path / "bad.md").write_text("Hello\u00A0world\n", encoding="utf-8")
+    result = subprocess.run(  # noqa: S603
+        [sys.executable, str(_script_path()), str(tmp_path)],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 1
+    assert "U+00A0" in result.stdout
+
+
+def test_check_bidi_fails_on_thin_space(tmp_path: Path) -> None:
+    (tmp_path / "bad.md").write_text("a\u2009b\n", encoding="utf-8")
+    result = subprocess.run(  # noqa: S603
+        [sys.executable, str(_script_path()), str(tmp_path)],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 1
+    assert "U+2009" in result.stdout
+
+
 def test_check_bidi_skips_binary_files_safely(tmp_path: Path) -> None:
     (tmp_path / "blob").write_bytes(b"\x00\x01\x02\x03\xE2\x80\xAE")
+    result = subprocess.run(  # noqa: S603
+        [sys.executable, str(_script_path()), str(tmp_path)],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0
+    assert "No suspicious Unicode controls found." in result.stdout
+
+
+def test_check_bidi_allows_normal_unicode_letters_and_emoji(tmp_path: Path) -> None:
+    (tmp_path / "ok.md").write_text("Cafe \u00E9clair and \U0001F99E\n", encoding="utf-8")
     result = subprocess.run(  # noqa: S603
         [sys.executable, str(_script_path()), str(tmp_path)],
         check=False,
