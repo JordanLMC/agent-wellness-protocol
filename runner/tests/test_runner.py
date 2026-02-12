@@ -5,7 +5,7 @@ import os
 from datetime import UTC, date, datetime
 from pathlib import Path
 
-from clawspa_runner.service import RunnerService
+from clawspa_runner.service import ProofSubmissionError, RunnerService
 
 
 def _repo_root() -> Path:
@@ -358,3 +358,38 @@ def test_proofs_purge_removes_old_entries(tmp_path: Path) -> None:
     assert purge["purged_files"] == 1
     assert old_proof.exists() is False
     assert recent_proof.exists() is True
+
+
+def test_feedback_add_appends_jsonl_and_redacts_secret_details(tmp_path: Path) -> None:
+    os.environ["AGENTWELLNESS_HOME"] = str(tmp_path / "home")
+    service = RunnerService.create(_repo_root())
+    item = service.add_feedback(
+        severity="medium",
+        component="proofs",
+        title="Proof UX confusion",
+        summary="tier mismatch not visible",
+        details="Bearer abcdefghijklmnopqrstuvwxyz1234567890",
+        tags=["ux", "proof"],
+        actor="agent",
+        actor_id="openclaw:moltfred",
+    )
+    assert item["details"] == "[redacted]"
+    rows = service.list_feedback(range_value="7d", actor_id="openclaw:moltfred")
+    assert len(rows) == 1
+    assert rows[0]["feedback_id"] == item["feedback_id"]
+    assert rows[0]["actor"]["id"] == "openclaw:moltfred"
+
+
+def test_proof_ref_rejects_path_separators(tmp_path: Path) -> None:
+    os.environ["AGENTWELLNESS_HOME"] = str(tmp_path / "home")
+    service = RunnerService.create(_repo_root())
+    try:
+        service.complete_quest(
+            "wellness.identity.anchor.mission_statement.v1",
+            "P0",
+            "",
+            artifacts=[{"ref": "nested/path/ref", "summary": "sanitized"}],
+        )
+        assert False, "Expected ProofSubmissionError for invalid ref"
+    except ProofSubmissionError as exc:
+        assert exc.code == "PROOF_REF_INVALID"

@@ -25,12 +25,14 @@ VALID_EVENT_TYPES = {
     "runner.started",
     "plan.generated",
     "proof.submitted",
+    "proof.rejected",
     "quest.completed",
     "quest.failed",
     "scorecard.updated",
     "profile.updated",
     "capability.granted",
     "capability.revoked",
+    "feedback.submitted",
     "risk.flagged",
     "telemetry.purged",
     "trust_signal.updated",
@@ -587,6 +589,7 @@ class TelemetryLogger:
         failures = [evt for evt in in_window if evt.get("event_type") == "quest.failed"]
         plans = [evt for evt in in_window if evt.get("event_type") == "plan.generated"]
         flags = [evt for evt in in_window if evt.get("event_type") == "risk.flagged"]
+        feedback = [evt for evt in in_window if evt.get("event_type") == "feedback.submitted"]
 
         quest_pillars_by_id: dict[str, list[str]] = {}
         quest_pack_by_id: dict[str, str] = {}
@@ -645,6 +648,8 @@ class TelemetryLogger:
         risk_flags_by_pillar: Counter[str] = Counter()
         attempts_by_pillar: Counter[str] = Counter()
         successes_by_pillar: Counter[str] = Counter()
+        feedback_by_component: Counter[str] = Counter()
+        feedback_by_severity: Counter[str] = Counter()
 
         for event in completions:
             data = event.get("data", {})
@@ -664,6 +669,17 @@ class TelemetryLogger:
         for event in flags:
             for pillar in _resolve_pillars(event):
                 risk_flags_by_pillar[pillar] += 1
+
+        for event in feedback:
+            data = event.get("data", {})
+            if not isinstance(data, dict):
+                continue
+            component = data.get("component")
+            severity = data.get("severity")
+            if isinstance(component, str) and component:
+                feedback_by_component[component] += 1
+            if isinstance(severity, str) and severity:
+                feedback_by_severity[severity] += 1
 
         plans_generated = len(plans)
         quest_count_sum = sum(int(evt.get("data", {}).get("quest_count", 0)) for evt in plans)
@@ -709,6 +725,9 @@ class TelemetryLogger:
             "failures_by_reason": dict(sorted(failures_by_reason.items())),
             "risk_flags_count": len(flags),
             "risk_flags_by_pillar": dict(sorted(risk_flags_by_pillar.items())),
+            "feedback_count": len(feedback),
+            "feedback_by_component": dict(sorted(feedback_by_component.items())),
+            "feedback_by_severity": dict(sorted(feedback_by_severity.items())),
             "top_quests_completed": [
                 {"quest_id": quest_id, "count": count}
                 for quest_id, count in sorted(quest_counts.items(), key=lambda item: (-item[1], item[0]))[:10]
@@ -843,12 +862,15 @@ def diff_aggregated_summaries(a: dict[str, Any], b: dict[str, Any]) -> dict[str,
             "daily_streak_delta": _delta_int("daily_streak"),
             "weekly_streak_delta": _delta_int("weekly_streak"),
             "risk_flags_count_delta": _delta_int("risk_flags_count"),
+            "feedback_count_delta": _delta_int("feedback_count"),
             "quest_success_rate_delta": _delta_float("quest_success_rate"),
             "completions_by_actor_id_delta": _counter_delta("completions_by_actor_id"),
             "completions_by_pillar_delta": _counter_delta("completions_by_pillar"),
             "xp_by_pillar_delta": _counter_delta("xp_by_pillar"),
             "completions_by_pack_delta": _counter_delta("completions_by_pack"),
             "risk_flags_by_pillar_delta": _counter_delta("risk_flags_by_pillar"),
+            "feedback_by_component_delta": _counter_delta("feedback_by_component"),
+            "feedback_by_severity_delta": _counter_delta("feedback_by_severity"),
             "quest_success_rate_by_pillar_delta": _counter_delta_float("quest_success_rate_by_pillar"),
             "top_quests_completed_delta": _top_quest_delta(),
         },
@@ -871,6 +893,7 @@ def render_summary_diff_text(diff_payload: dict[str, Any]) -> str:
         f"Daily streak delta: {changes.get('daily_streak_delta', 0)}",
         f"Weekly streak delta: {changes.get('weekly_streak_delta', 0)}",
         f"Risk flags delta: {changes.get('risk_flags_count_delta', 0)}",
+        f"Feedback submitted delta: {changes.get('feedback_count_delta', 0)}",
         f"Quest success rate delta: {changes.get('quest_success_rate_delta', 0.0)}",
     ]
     pillar_delta = changes.get("completions_by_pillar_delta", {})

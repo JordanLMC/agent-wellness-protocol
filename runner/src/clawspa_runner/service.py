@@ -7,6 +7,7 @@ import json
 import os
 import re
 import time
+import unicodedata
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
@@ -29,12 +30,22 @@ from .telemetry import (
 
 STATE_SCHEMA_VERSION = "0.1"
 TIER_RANK = {"P0": 0, "P1": 1, "P2": 2, "P3": 3}
-MAX_INLINE_ARTIFACT_CHARS = 2048
-MAX_ARTIFACT_FILE_BYTES = 512 * 1024
 DATE_RANGE_ABS_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}\.\.\d{4}-\d{2}-\d{2}$")
+ARTIFACT_REF_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9 ._:-]{0,127}$")
 DEFAULT_TELEMETRY_RETENTION_DAYS = 30
 DEFAULT_PROOFS_RETENTION_DAYS = 90
 DEFAULT_TRACE_ID_PREFIX = "cli"
+FEEDBACK_SCHEMA_VERSION = "0.1"
+MAX_FEEDBACK_TITLE_CHARS = 120
+MAX_FEEDBACK_SUMMARY_CHARS = 280
+MAX_FEEDBACK_DETAILS_CHARS = 4000
+MAX_FEEDBACK_ITEMS = 100
+MAX_FEEDBACK_TAGS = 20
+MAX_FEEDBACK_LINK_VALUE_CHARS = 200
+MAX_ARTIFACT_REF_CHARS = 128
+MAX_ARTIFACT_SUMMARY_CHARS = 4000
+VALID_FEEDBACK_SEVERITY = {"info", "low", "medium", "high", "critical"}
+VALID_FEEDBACK_COMPONENT = {"proofs", "planner", "api", "mcp", "telemetry", "quests", "docs", "other"}
 
 TRUST_SIGNAL_RULES: dict[str, dict[str, Any]] = {
     "wellness.security_access_control.permissions.delta_inventory.v1": {
@@ -70,6 +81,26 @@ TRUST_SIGNAL_RULES: dict[str, dict[str, Any]] = {
 }
 
 
+class ProofSubmissionError(ValueError):
+    """Structured proof validation error for stable API responses."""
+
+    def __init__(self, code: str, message: str, *, hint: str | None = None, **context: Any) -> None:
+        super().__init__(message)
+        self.code = code
+        self.message = message
+        self.hint = hint
+        self.context = context
+
+    def to_dict(self) -> dict[str, Any]:
+        payload: dict[str, Any] = {"code": self.code, "message": self.message}
+        if self.hint:
+            payload["hint"] = self.hint
+        for key, value in self.context.items():
+            if value is not None:
+                payload[key] = value
+        return payload
+
+
 def _now_iso() -> str:
     return datetime.now(tz=UTC).isoformat()
 
@@ -93,6 +124,21 @@ def _env_days(name: str, fallback: int) -> int:
 
 def _new_trace_id(prefix: str = DEFAULT_TRACE_ID_PREFIX) -> str:
     return f"{prefix}:{uuid.uuid4()}"
+
+
+def _strip_controls(value: str) -> str:
+    return "".join(ch for ch in value if not unicodedata.category(ch).startswith("C"))
+
+
+def _sanitize_feedback_text(value: str | None, *, max_chars: int, fallback: str = "") -> str:
+    text = _strip_controls(value or "").strip()
+    if payload_contains_secrets(text) or payload_contains_pii(text):
+        return "[redacted]"
+    if len(text) > max_chars:
+        return f"{text[:max_chars]}...[truncated]"
+    if not text:
+        return fallback
+    return text
 
 
 def _load_json(path: Path, default: Any) -> Any:
@@ -228,6 +274,10 @@ class RunnerService:
     def migration_path(self) -> Path:
         return self.dirs["state"] / "state_meta.json"
 
+    @property
+    def feedback_path(self) -> Path:
+        return self.dirs["feedback"] / "feedback.jsonl"
+
     def _ensure_state_files(self) -> None:
         if not self.migration_path.exists():
             _save_json(self.migration_path, {"state_schema_version": STATE_SCHEMA_VERSION})
@@ -258,6 +308,8 @@ class RunnerService:
             _save_json(self.ticket_path, {"state_schema_version": STATE_SCHEMA_VERSION, "tickets": []})
         if not self.trust_signal_path.exists():
             _save_json(self.trust_signal_path, {"state_schema_version": STATE_SCHEMA_VERSION, "items": []})
+        if not self.feedback_path.exists():
+            self.feedback_path.write_text("", encoding="utf-8")
 
     def _migrate_state(self, old_version: str, new_version: str) -> None:
         # v0.1 currently upgrades legacy list/object layouts to schema-versioned wrappers.
@@ -853,6 +905,56 @@ class RunnerService:
                 return quest
         return None
 
+    def _plan_quest_metadata(self, quest: dict[str, Any]) -> dict[str, Any]:
+        q = quest.get("quest", {})
+        proof = q.get("proof", {})
+        artifacts_decl = proof.get("artifacts", [])
+        artifact_declarations: list[dict[str, Any]] = []
+        if isinstance(artifacts_decl, list):
+            for item in artifacts_decl:
+                if not isinstance(item, dict):
+                    continue
+                artifact_declarations.append(
+                    {
+                        "id": item.get("id"),
+                        "type": item.get("type"),
+                        "required": bool(item.get("required", True)),
+                        "redaction_policy": item.get("redaction_policy"),
+                    }
+                )
+        capabilities = [cap for cap in q.get("required_capabilities", []) if isinstance(cap, str)]
+        pillars = [pillar for pillar in q.get("pillars", []) if isinstance(pillar, str)]
+        return {
+            "quest_id": q.get("id"),
+            "title": q.get("title"),
+            "pillars": pillars,
+            "risk_level": q.get("risk_level"),
+            "mode": q.get("mode"),
+            "required_capabilities": capabilities,
+            "required_proof_tier": proof.get("tier", "P0"),
+            "artifacts": artifact_declarations,
+        }
+
+    def _ensure_plan_metadata(self, plan: dict[str, Any]) -> dict[str, Any]:
+        quest_metadata = plan.get("quest_metadata")
+        if isinstance(quest_metadata, list) and quest_metadata:
+            return plan
+        quest_ids = plan.get("quest_ids", [])
+        if not isinstance(quest_ids, list):
+            plan["quest_metadata"] = []
+            return plan
+        all_quests = self.list_quests()
+        metadata_rows: list[dict[str, Any]] = []
+        for quest_id in quest_ids:
+            if not isinstance(quest_id, str):
+                continue
+            quest = all_quests.get(quest_id)
+            if quest is None:
+                continue
+            metadata_rows.append(self._plan_quest_metadata(quest))
+        plan["quest_metadata"] = metadata_rows
+        return plan
+
     def generate_daily_plan(
         self,
         target_date: date,
@@ -930,6 +1032,7 @@ class RunnerService:
             "generated_at": _now_iso(),
             "quest_ids": [quest["quest"]["id"] for quest in selected[:5]],
             "quests": selected[:5],
+            "quest_metadata": [self._plan_quest_metadata(quest) for quest in selected[:5]],
         }
         _save_json(self.dirs["plans"] / f"daily-{key}.json", plan)
         self._emit_event(
@@ -977,7 +1080,14 @@ class RunnerService:
 
         plan_file = self.dirs["plans"] / f"daily-{target_date.isoformat()}.json"
         if plan_file.exists():
-            return _load_json(plan_file, {})
+            cached = _load_json(plan_file, {})
+            if isinstance(cached, dict):
+                had_metadata = isinstance(cached.get("quest_metadata"), list) and bool(cached.get("quest_metadata"))
+                enriched = self._ensure_plan_metadata(cached)
+                if not had_metadata:
+                    _save_json(plan_file, enriched)
+                return enriched
+            return {}
         return self.generate_daily_plan(
             target_date,
             source=source,
@@ -1038,6 +1148,7 @@ class RunnerService:
             "generated_at": _now_iso(),
             "quest_ids": [quest["quest"]["id"] for quest in selected[:3]],
             "quests": selected[:3],
+            "quest_metadata": [self._plan_quest_metadata(quest) for quest in selected[:3]],
         }
         _save_json(self.dirs["plans"] / f"weekly-{week_key}.json", plan)
         self._emit_event(
@@ -1077,7 +1188,14 @@ class RunnerService:
         week_key = _iso_week(target_date)
         plan_file = self.dirs["plans"] / f"weekly-{week_key}.json"
         if plan_file.exists():
-            return _load_json(plan_file, {})
+            cached = _load_json(plan_file, {})
+            if isinstance(cached, dict):
+                had_metadata = isinstance(cached.get("quest_metadata"), list) and bool(cached.get("quest_metadata"))
+                enriched = self._ensure_plan_metadata(cached)
+                if not had_metadata:
+                    _save_json(plan_file, enriched)
+                return enriched
+            return {}
         return self.generate_weekly_plan(
             target_date,
             source=source,
@@ -1094,36 +1212,56 @@ class RunnerService:
         if payload_requests_raw_logs(text):
             raise ValueError(f"{source} appears to contain raw log content.")
 
-    def _artifact_ref(self, artifact: str) -> dict[str, Any]:
-        candidate = Path(artifact).expanduser()
-        if candidate.exists():
-            size_bytes = candidate.stat().st_size
-            if size_bytes > MAX_ARTIFACT_FILE_BYTES:
-                raise ValueError(
-                    f"Artifact file exceeds {MAX_ARTIFACT_FILE_BYTES} bytes. "
-                    "Provide a smaller redacted summary artifact."
-                )
-            raw = candidate.read_bytes()
-            try:
-                text_preview = raw[:8192].decode("utf-8")
-            except UnicodeDecodeError as exc:
-                raise ValueError("Artifact files must be UTF-8 text in v0.1.") from exc
-            self._validate_artifact_text(text_preview, source=f"Artifact file '{candidate}'")
-            return {
-                "type": "path",
-                "ref": str(candidate.resolve()),
-                "sha256": hashlib.sha256(raw).hexdigest(),
-                "size_bytes": size_bytes,
-            }
+    def _normalize_artifact_ref(self, raw_ref: str) -> str:
+        ref = raw_ref.strip()
+        if not ref:
+            raise ProofSubmissionError(
+                "PROOF_REF_INVALID",
+                "artifact ref must be short; put long content in summary",
+                hint="Use artifacts[].summary for long text; keep ref like 'control-owner-attestation'.",
+            )
+        if "/" in ref or "\\" in ref:
+            raise ProofSubmissionError(
+                "PROOF_REF_INVALID",
+                "artifact ref must be short; put long content in summary",
+                hint="Use artifacts[].summary for long text; keep ref like 'control-owner-attestation'.",
+            )
+        if len(ref) > MAX_ARTIFACT_REF_CHARS or not ARTIFACT_REF_PATTERN.match(ref):
+            raise ProofSubmissionError(
+                "PROOF_REF_INVALID",
+                "artifact ref must be short; put long content in summary",
+                hint="Use artifacts[].summary for long text; keep ref like 'control-owner-attestation'.",
+            )
+        self._validate_artifact_text(ref, source="Artifact ref")
+        return ref
 
-        if len(artifact) > MAX_INLINE_ARTIFACT_CHARS:
-            raise ValueError(f"Inline artifact text exceeds {MAX_INLINE_ARTIFACT_CHARS} characters.")
-        self._validate_artifact_text(artifact, source="Inline artifact")
+    def _artifact_ref(self, artifact: dict[str, Any]) -> dict[str, Any]:
+        ref = self._normalize_artifact_ref(str(artifact.get("ref", "")))
+        summary_raw = artifact.get("summary")
+        summary = ""
+        if summary_raw is not None:
+            if not isinstance(summary_raw, str):
+                raise ProofSubmissionError(
+                    "PROOF_SUMMARY_INVALID",
+                    "artifact summary must be a string when provided",
+                )
+            summary = summary_raw.strip()
+            if len(summary) > MAX_ARTIFACT_SUMMARY_CHARS:
+                raise ProofSubmissionError(
+                    "PROOF_SUMMARY_TOO_LONG",
+                    f"artifact summary exceeds {MAX_ARTIFACT_SUMMARY_CHARS} characters",
+                )
+            if summary:
+                self._validate_artifact_text(summary, source="Artifact summary")
+        ref_bytes = ref.encode("utf-8")
+        summary_bytes = summary.encode("utf-8")
         return {
-            "type": "inline",
-            "ref": artifact[:256],
-            "sha256": hashlib.sha256(artifact.encode("utf-8")).hexdigest(),
-            "size_bytes": len(artifact.encode("utf-8")),
+            "type": "ref",
+            "ref": ref,
+            "sha256": hashlib.sha256(ref_bytes).hexdigest(),
+            "size_bytes": len(ref_bytes),
+            "summary_sha256": hashlib.sha256(summary_bytes).hexdigest() if summary else None,
+            "summary_chars": len(summary),
         }
 
     def _can_run_quest(self, quest: dict[str, Any]) -> tuple[bool, str]:
@@ -1150,7 +1288,7 @@ class RunnerService:
         tier: str,
         artifact: str,
         actor_mode: str = "agent",
-        artifacts: list[str] | None = None,
+        artifacts: list[dict[str, Any] | str] | None = None,
         source: str = "cli",
         actor_id: str = "unknown",
         trace_id: str | None = None,
@@ -1162,7 +1300,15 @@ class RunnerService:
         resolved_pillars: list[str] = []
         resolved_pack_id: str | None = None
 
-        def _fail(reason: str, message: str, *, raise_exc: Exception) -> None:
+        def _reject(
+            reason: str,
+            message: str,
+            *,
+            raise_exc: Exception,
+            code: str = "PROOF_REJECTED",
+            hint: str | None = None,
+            **context: Any,
+        ) -> None:
             self._emit_event(
                 "quest.failed",
                 actor=actor,
@@ -1177,10 +1323,31 @@ class RunnerService:
                     "detail_hash": hashlib.sha256(message.encode("utf-8")).hexdigest(),
                 },
             )
+            reject_payload = {
+                "quest_id": quest_id,
+                "pack_id": resolved_pack_id,
+                "pillars": resolved_pillars,
+                "reason": reason,
+                "code": code,
+            }
+            if hint:
+                reject_payload["hint"] = hint
+            for key, value in context.items():
+                if value is not None:
+                    reject_payload[key] = value
+            self._emit_event(
+                "proof.rejected",
+                actor=actor,
+                actor_id=actor_id,
+                source=source,
+                trace_id=trace_id,
+                data=reject_payload,
+            )
             raise raise_exc
 
         if tier not in TIER_RANK:
-            _fail("validation_error", "invalid proof tier", raise_exc=ValueError("tier must be one of P0|P1|P2|P3"))
+            error = ProofSubmissionError("PROOF_TIER_INVALID", "tier must be one of P0|P1|P2|P3")
+            _reject("validation_error", error.message, raise_exc=error, code=error.code)
 
         if payload_contains_secrets({"artifact": artifact, "artifacts": artifacts or []}):
             self._emit_event(
@@ -1191,23 +1358,26 @@ class RunnerService:
                 trace_id=trace_id,
                 data={"reason": "artifact_secret_like", "quest_id": quest_id},
             )
-            _fail(
+            error = ProofSubmissionError("PROOF_ARTIFACT_UNSAFE", "Artifact payload appears to contain secret-like data.")
+            _reject(
                 "validation_error",
-                "artifact payload appears secret-like",
-                raise_exc=ValueError("Artifact payload appears to contain secret-like data."),
+                error.message,
+                raise_exc=error,
+                code=error.code,
             )
 
         try:
             quest = self.get_quest(quest_id)
         except KeyError as exc:
-            _fail("not_found", "unknown quest_id", raise_exc=exc)
+            _reject("not_found", "unknown quest_id", raise_exc=exc, code="PROOF_QUEST_NOT_FOUND")
 
         allowed, mode_used = self._can_run_quest(quest)
         if not allowed:
-            _fail(
+            _reject(
                 "capability_missing" if "missing capability grants" in mode_used else "policy_blocked",
                 mode_used,
                 raise_exc=PermissionError(f"Quest blocked in Safe Mode: {mode_used}"),
+                code="PROOF_BLOCKED_BY_POLICY",
             )
 
         q = quest["quest"]
@@ -1215,10 +1385,19 @@ class RunnerService:
         resolved_pack_id = quest.get("_pack")
         expected_tier = q.get("proof", {}).get("tier")
         if expected_tier in TIER_RANK and TIER_RANK[tier] < TIER_RANK[expected_tier]:
-            _fail(
+            error = ProofSubmissionError(
+                "PROOF_TIER_TOO_LOW",
+                f"Quest requires {expected_tier} minimum",
+                required_tier=expected_tier,
+                provided_tier=tier,
+            )
+            _reject(
                 "validation_error",
-                "tier below required minimum",
-                raise_exc=ValueError(f"tier {tier} does not meet quest minimum proof tier {expected_tier}."),
+                error.message,
+                raise_exc=error,
+                code=error.code,
+                required_tier=expected_tier,
+                provided_tier=tier,
             )
 
         declared_artifacts = q.get("proof", {}).get("artifacts", [])
@@ -1230,41 +1409,72 @@ class RunnerService:
         if tier in {"P2", "P3"}:
             for artifact_decl in required_artifacts:
                 if not artifact_decl.get("redaction_policy"):
-                    _fail(
+                    _reject(
                         "validation_error",
                         "missing redaction policy",
                         raise_exc=ValueError("Quest proof artifacts for P2/P3 must include redaction_policy."),
+                        code="PROOF_REDACTION_POLICY_MISSING",
                     )
 
         artifact_inputs = artifacts or []
         if artifact and artifact.strip():
-            artifact_inputs = [artifact.strip(), *artifact_inputs]
-        normalized_artifacts = []
-        seen_artifacts = set()
+            artifact_inputs = [{"ref": artifact.strip()}] + artifact_inputs
+        normalized_artifacts: list[dict[str, Any]] = []
+        seen_refs = set()
         for item in artifact_inputs:
-            if not isinstance(item, str):
+            ref_value = ""
+            summary_value: str | None = None
+            if isinstance(item, dict):
+                ref_raw = item.get("ref")
+                if isinstance(ref_raw, str):
+                    ref_value = ref_raw
+                summary_raw = item.get("summary")
+                if summary_raw is None or isinstance(summary_raw, str):
+                    summary_value = summary_raw
+            elif isinstance(item, str):
+                ref_value = item
+            ref_value = ref_value.strip()
+            if not ref_value or ref_value in seen_refs:
                 continue
-            normalized = item.strip()
-            if not normalized or normalized in seen_artifacts:
-                continue
-            normalized_artifacts.append(normalized)
-            seen_artifacts.add(normalized)
+            normalized_artifacts.append({"ref": ref_value, "summary": summary_value})
+            seen_refs.add(ref_value)
 
         if required_artifacts and not normalized_artifacts:
-            _fail(
+            _reject(
                 "validation_error",
                 "required artifact missing",
-                raise_exc=ValueError("This quest requires at least one artifact reference."),
+                raise_exc=ProofSubmissionError("PROOF_ARTIFACT_REQUIRED", "This quest requires at least one artifact reference."),
+                code="PROOF_ARTIFACT_REQUIRED",
             )
         if tier != "P0" and not normalized_artifacts:
-            _fail(
+            _reject(
                 "validation_error",
                 "tier P1+ requires artifact",
-                raise_exc=ValueError("tier P1+ requires at least one artifact reference."),
+                raise_exc=ProofSubmissionError("PROOF_ARTIFACT_REQUIRED", "tier P1+ requires at least one artifact reference."),
+                code="PROOF_ARTIFACT_REQUIRED",
             )
 
         try:
             artifact_refs = [self._artifact_ref(item) for item in normalized_artifacts]
+        except ProofSubmissionError as exc:
+            lowered = exc.message.lower()
+            if "secret-like" in lowered or "pii-like" in lowered or "raw log" in lowered:
+                self._emit_event(
+                    "risk.flagged",
+                    actor="system",
+                    actor_id=actor_id,
+                    source=source,
+                    trace_id=trace_id,
+                    data={"reason": "artifact_blocked", "quest_id": quest_id},
+                )
+            _reject(
+                "validation_error",
+                exc.message,
+                raise_exc=exc,
+                code=exc.code,
+                hint=exc.hint,
+                **exc.context,
+            )
         except ValueError as exc:
             lowered = str(exc).lower()
             if "secret-like" in lowered or "pii-like" in lowered or "raw log" in lowered:
@@ -1276,7 +1486,8 @@ class RunnerService:
                     trace_id=trace_id,
                     data={"reason": "artifact_blocked", "quest_id": quest_id},
                 )
-            _fail("validation_error", str(exc), raise_exc=exc)
+            error = ProofSubmissionError("PROOF_ARTIFACT_INVALID", str(exc))
+            _reject("validation_error", error.message, raise_exc=error, code=error.code)
 
         pillars = resolved_pillars
         pack_id = resolved_pack_id
@@ -1466,6 +1677,174 @@ class RunnerService:
                         narrowed.append(item)
                 filtered = narrowed
         return filtered
+
+    def _append_feedback_row(self, payload: dict[str, Any]) -> None:
+        self.feedback_path.parent.mkdir(parents=True, exist_ok=True)
+        with self.feedback_path.open("a", encoding="utf-8", newline="\n") as handle:
+            handle.write(json.dumps(payload, ensure_ascii=True, sort_keys=True))
+            handle.write("\n")
+
+    def _iter_feedback_rows(self) -> list[dict[str, Any]]:
+        if not self.feedback_path.exists():
+            return []
+        rows: list[dict[str, Any]] = []
+        for line in self.feedback_path.read_text(encoding="utf-8").splitlines():
+            if not line.strip():
+                continue
+            try:
+                node = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(node, dict):
+                rows.append(node)
+        return rows
+
+    def add_feedback(
+        self,
+        *,
+        severity: str,
+        component: str,
+        title: str,
+        summary: str = "",
+        details: str | None = None,
+        links: dict[str, str] | None = None,
+        tags: list[str] | None = None,
+        source: str = "cli",
+        actor: str = "human",
+        actor_id: str = "unknown",
+        trace_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Persist one sanitized feedback item and emit metadata-only telemetry."""
+
+        normalized_severity = severity.strip().lower()
+        normalized_component = component.strip().lower()
+        if normalized_severity not in VALID_FEEDBACK_SEVERITY:
+            raise ValueError(f"severity must be one of {sorted(VALID_FEEDBACK_SEVERITY)}.")
+        if normalized_component not in VALID_FEEDBACK_COMPONENT:
+            raise ValueError(f"component must be one of {sorted(VALID_FEEDBACK_COMPONENT)}.")
+
+        sanitized_title = _sanitize_feedback_text(title, max_chars=MAX_FEEDBACK_TITLE_CHARS)
+        if not sanitized_title:
+            raise ValueError("title is required.")
+        sanitized_summary = _sanitize_feedback_text(summary, max_chars=MAX_FEEDBACK_SUMMARY_CHARS)
+        sanitized_details = _sanitize_feedback_text(details, max_chars=MAX_FEEDBACK_DETAILS_CHARS) if details else None
+
+        normalized_links: dict[str, str] = {}
+        allowed_links = {"quest_id", "proof_id", "endpoint", "commit", "pr"}
+        for key, value in (links or {}).items():
+            if key not in allowed_links or not isinstance(value, str):
+                continue
+            sanitized_value = _sanitize_feedback_text(value, max_chars=MAX_FEEDBACK_LINK_VALUE_CHARS)
+            if sanitized_value:
+                normalized_links[key] = sanitized_value
+
+        normalized_tags: list[str] = []
+        seen_tags = set()
+        for tag in tags or []:
+            if not isinstance(tag, str):
+                continue
+            sanitized_tag = _sanitize_feedback_text(tag, max_chars=40)
+            if not sanitized_tag or sanitized_tag in seen_tags:
+                continue
+            normalized_tags.append(sanitized_tag)
+            seen_tags.add(sanitized_tag)
+            if len(normalized_tags) >= MAX_FEEDBACK_TAGS:
+                break
+
+        entry = {
+            "schema_version": FEEDBACK_SCHEMA_VERSION,
+            "feedback_id": str(uuid.uuid4()),
+            "ts": _now_iso(),
+            "actor": {"kind": self._normalize_actor(actor), "id": self._normalize_actor_id(actor_id)},
+            "source": self._normalize_source(source),
+            "trace_id": sanitize_actor_id(trace_id) if trace_id else None,
+            "severity": normalized_severity,
+            "component": normalized_component,
+            "title": sanitized_title,
+            "summary": sanitized_summary,
+            "details": sanitized_details,
+            "links": normalized_links,
+            "tags": normalized_tags,
+        }
+        self._append_feedback_row(entry)
+        self._emit_event(
+            "feedback.submitted",
+            actor=actor,
+            actor_id=actor_id,
+            source=source,
+            trace_id=trace_id,
+            data={
+                "feedback_id": entry["feedback_id"],
+                "severity": normalized_severity,
+                "component": normalized_component,
+                "tag_count": len(normalized_tags),
+            },
+        )
+        return entry
+
+    def list_feedback(
+        self,
+        *,
+        range_value: str = "7d",
+        actor_id: str | None = None,
+        limit: int = MAX_FEEDBACK_ITEMS,
+    ) -> list[dict[str, Any]]:
+        """List feedback rows filtered by time window and optional actor id."""
+
+        window = parse_range(range_value)
+        cutoff = datetime.now(tz=UTC) - window
+        actor_filter = sanitize_actor_id(actor_id) if actor_id else None
+        items: list[dict[str, Any]] = []
+        for row in self._iter_feedback_rows():
+            parsed_ts = self._parse_iso_dt(row.get("ts"))
+            if parsed_ts is None or parsed_ts < cutoff:
+                continue
+            row_actor = row.get("actor", {})
+            row_actor_id = sanitize_actor_id(row_actor.get("id")) if isinstance(row_actor, dict) else "unknown"
+            if actor_filter is not None and row_actor_id != actor_filter:
+                continue
+            items.append(row)
+        items.sort(key=lambda item: str(item.get("ts", "")), reverse=True)
+        if limit <= 0:
+            return []
+        return items[:limit]
+
+    def feedback_summary(self, *, range_value: str = "30d", actor_id: str | None = None) -> dict[str, Any]:
+        """Return aggregate feedback counts by severity/component plus top tags."""
+
+        items = self.list_feedback(range_value=range_value, actor_id=actor_id, limit=10_000)
+        severity_counts: dict[str, int] = {}
+        component_counts: dict[str, int] = {}
+        tag_counts: dict[str, int] = {}
+
+        for item in items:
+            severity = item.get("severity")
+            component = item.get("component")
+            if isinstance(severity, str):
+                severity_counts[severity] = severity_counts.get(severity, 0) + 1
+            if isinstance(component, str):
+                component_counts[component] = component_counts.get(component, 0) + 1
+            tags = item.get("tags", [])
+            if isinstance(tags, list):
+                for tag in tags:
+                    if not isinstance(tag, str):
+                        continue
+                    tag_counts[tag] = tag_counts.get(tag, 0) + 1
+
+        top_tags = [
+            {"tag": tag, "count": count}
+            for tag, count in sorted(tag_counts.items(), key=lambda item: (-item[1], item[0]))[:10]
+        ]
+        return {
+            "schema_version": FEEDBACK_SCHEMA_VERSION,
+            "generated_at": _now_iso(),
+            "range": range_value,
+            "actor_id_filter": sanitize_actor_id(actor_id) if actor_id else None,
+            "feedback_count": len(items),
+            "feedback_by_severity": dict(sorted(severity_counts.items())),
+            "feedback_by_component": dict(sorted(component_counts.items())),
+            "top_tags": top_tags,
+        }
 
     def get_scorecard(self) -> dict[str, Any]:
         """Return current XP/streak summary plus recent completion metadata."""

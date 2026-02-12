@@ -1,7 +1,7 @@
 # TELEMETRY.md
 Version: v0.1
 Status: Draft
-Last updated: 2026-02-11
+Last updated: 2026-02-12
 Owner: Project Team
 
 ## Purpose
@@ -29,12 +29,14 @@ Every event includes:
   - `runner.started`
   - `plan.generated`
   - `proof.submitted`
+  - `proof.rejected`
   - `quest.completed`
   - `quest.failed`
   - `scorecard.updated`
   - `profile.updated`
   - `capability.granted`
   - `capability.revoked`
+  - `feedback.submitted`
   - `risk.flagged`
   - `telemetry.purged`
   - `trust_signal.updated`
@@ -78,6 +80,7 @@ Telemetry is redacted-by-design:
 - Long values are truncated.
 - If sanitization occurs, `risk.flagged` is emitted with redaction/truncation counts.
 - Actor IDs and trace IDs are treated as untrusted input and sanitized.
+- `feedback.submitted` telemetry includes metadata only (`feedback_id`, `severity`, `component`, counts), not full free-text details.
 
 ## CLI operations
 
@@ -133,6 +136,9 @@ Range format:
 - `failures_by_reason`
 - `risk_flags_count`
 - `risk_flags_by_pillar`
+- `feedback_count`
+- `feedback_by_component`
+- `feedback_by_severity`
 - `top_quests_completed`
 - `timebox_estimates_sum`
 - `observed_duration_sum`
@@ -145,6 +151,7 @@ No raw events are included in export output.
 - Default snapshot location (without `--out`): `~/.agentwellness/baselines/`.
 - `runner telemetry diff` compares two aggregated summaries and reports safe deltas, including:
   - totals/streaks/success rates
+  - feedback count/component/severity deltas
   - by-actor completion deltas
   - by-pillar completion/xp/risk-flag deltas
   - by-pack completion deltas

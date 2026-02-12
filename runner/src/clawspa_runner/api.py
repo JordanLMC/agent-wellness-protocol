@@ -7,17 +7,18 @@ from typing import Any
 from uuid import uuid4
 
 from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
-from .service import RunnerService
+from .service import ProofSubmissionError, RunnerService
 from .telemetry import sanitize_actor_id
 
 
 class ProofArtifact(BaseModel):
     """One redacted proof reference submitted for quest completion."""
 
-    ref: str = Field(min_length=1, max_length=512)
-    summary: str | None = Field(default=None, max_length=280)
+    ref: str
+    summary: str | None = None
 
 
 class ProofRequest(BaseModel):
@@ -49,6 +50,19 @@ class RevokeRequest(BaseModel):
     actor_id: str | None = Field(default=None, max_length=200)
 
 
+class FeedbackRequest(BaseModel):
+    """Payload for `/v1/feedback` with local-first sanitized storage."""
+
+    severity: str
+    component: str
+    title: str
+    summary: str = ""
+    details: str | None = None
+    links: dict[str, str] = Field(default_factory=dict)
+    tags: list[str] = Field(default_factory=list)
+    actor_id: str | None = Field(default=None, max_length=200)
+
+
 def create_app(service: RunnerService) -> FastAPI:
     """Create API routes backed by `RunnerService` with actor/source attribution."""
 
@@ -61,7 +75,29 @@ def create_app(service: RunnerService) -> FastAPI:
         if not trace_id or trace_id == "unknown":
             trace_id = f"api:{uuid4()}"
         request.state.trace_id = trace_id
-        response = await call_next(request)
+        try:
+            response = await call_next(request)
+        except Exception as exc:  # noqa: BLE001
+            service.telemetry.log_event(
+                "risk.flagged",
+                actor="system",
+                actor_id="api:unknown",
+                source="api",
+                trace_id=trace_id,
+                data={
+                    "reason": "api_internal_error",
+                    "endpoint": request.url.path,
+                    "error_type": exc.__class__.__name__,
+                },
+            )
+            response = JSONResponse(
+                status_code=500,
+                content={
+                    "code": "INTERNAL_SERVER_ERROR",
+                    "message": "Internal server error",
+                    "trace_id": trace_id,
+                },
+            )
         response.headers["X-Clawspa-Trace-Id"] = trace_id
         return response
 
@@ -249,8 +285,8 @@ def create_app(service: RunnerService) -> FastAPI:
 
     @app.post("/v1/proofs")
     def submit_proof(request: ProofRequest, http_request: Request) -> dict[str, Any]:
-        artifact_refs = [item.ref for item in request.artifacts]
-        primary_artifact = artifact_refs[0] if artifact_refs else ""
+        artifact_rows = [{"ref": item.ref, "summary": item.summary} for item in request.artifacts]
+        primary_artifact = ""
         try:
             source, actor_kind, actor_id = request_context(
                 http_request,
@@ -262,11 +298,13 @@ def create_app(service: RunnerService) -> FastAPI:
                 request.tier,
                 primary_artifact,
                 actor_mode=actor_kind,
-                artifacts=artifact_refs[1:],
+                artifacts=artifact_rows,
                 source=source,
                 actor_id=actor_id,
                 trace_id=request_trace_id(http_request),
             )
+        except ProofSubmissionError as exc:
+            return JSONResponse(status_code=400, content=exc.to_dict())
         except (ValueError, PermissionError) as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         except KeyError as exc:
@@ -276,6 +314,47 @@ def create_app(service: RunnerService) -> FastAPI:
     def list_proofs(quest_id: str | None = None, date_range: str | None = None) -> list[dict[str, Any]]:
         try:
             return service.list_proofs(quest_id=quest_id, date_range=date_range)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/v1/feedback")
+    def submit_feedback(request: FeedbackRequest, http_request: Request) -> dict[str, Any]:
+        try:
+            source, actor, actor_id = request_context(http_request, default_actor="human", body_actor_id=request.actor_id)
+            return service.add_feedback(
+                severity=request.severity,
+                component=request.component,
+                title=request.title,
+                summary=request.summary,
+                details=request.details,
+                links=request.links,
+                tags=request.tags,
+                source=source,
+                actor=actor,
+                actor_id=actor_id,
+                trace_id=request_trace_id(http_request),
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.get("/v1/feedback")
+    def list_feedback(
+        range: str = Query("7d", pattern=r"^\d+[dh]$"),
+        actor_id: str | None = None,
+        limit: int = Query(100, ge=1, le=500),
+    ) -> list[dict[str, Any]]:
+        try:
+            return service.list_feedback(range_value=range, actor_id=actor_id, limit=min(limit, 100))
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.get("/v1/feedback/summary")
+    def feedback_summary(
+        range: str = Query("7d", pattern=r"^\d+[dh]$"),
+        actor_id: str | None = None,
+    ) -> dict[str, Any]:
+        try:
+            return service.feedback_summary(range_value=range, actor_id=actor_id)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 

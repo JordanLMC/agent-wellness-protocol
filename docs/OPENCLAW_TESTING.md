@@ -1,7 +1,7 @@
 # OPENCLAW_TESTING.md
 Version: v0.1
 Status: Draft
-Last updated: 2026-02-11
+Last updated: 2026-02-12
 Owner: Project Team
 
 ## Purpose
@@ -52,7 +52,7 @@ For capability grants, include both:
 - Body:
   - `quest_id`
   - `tier` (`P0|P1|P2|P3`)
-  - `artifacts` (refs only; do not include raw secrets)
+  - `artifacts` (short `ref` labels; put longer text in `summary`; do not include secrets)
   - optional `actor_id` (header still takes precedence)
 
 ### Capability grant (ticket + dual confirm)
@@ -85,6 +85,15 @@ Use or adapt this short script:
 3. `Complete one security or governance quest and submit proof with redacted summary only (no raw logs).`
 4. `Export /v1/scorecard/export and send the high-level summary only.`
 5. `Run telemetry snapshot + diff and share key deltas. If anything looks risky or unclear, pause and escalate.`
+
+## Friendly feedback snippet
+
+Use this when a flow is confusing or fails:
+
+1. `Please submit local feedback with severity, component, and a short title.`
+2. `Keep refs short and put longer context in summary/details.`
+3. `Never include secrets, tokens, passwords, or private keys.`
+4. `Use actor id openclaw:moltfred and include a trace-id so we can correlate safely.`
 
 ## Notes
 
