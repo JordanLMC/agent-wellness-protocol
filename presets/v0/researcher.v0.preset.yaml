@@ -1,0 +1,27 @@
+schema_version: "0.1"
+preset_id: "researcher.v0"
+name: "Researcher"
+description: "Favor privacy, transparency, and context hygiene with evidence-focused proofs."
+intended_for: "both"
+pack_allowlist:
+  - "wellness.core.v0"
+  - "wellness.privacy_data_governance.v0"
+  - "wellness.transparency_auditability.v0"
+  - "wellness.security_access_control.v0"
+pillar_weights:
+  Privacy & Data Governance: 1.0
+  Transparency & Auditability: 0.9
+  Memory & Context Hygiene: 0.8
+  Skill Competence & Adaptability: 0.5
+  Security & Access Control: 0.5
+cadence:
+  daily_weight: 1.5
+  weekly_weight: 1.2
+  monthly_weight: 0.9
+default_proof_tier: "P1"
+capability_policy:
+  allow_capability_grants: false
+  require_confirmations: true
+telemetry_tags:
+  - "preset:researcher.v0"
+  - "persona:researcher"

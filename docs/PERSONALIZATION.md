@@ -1,7 +1,7 @@
 # PERSONALIZATION.md
 Version: v0.1  
 Status: Draft  
-Last updated: 2026-02-09  
+Last updated: 2026-02-13  
 Owner: Project Team  
 
 ## Why this exists
@@ -56,6 +56,25 @@ This is the intended evolution. We can ship v0.1 without most of it, **as long a
 ---
 
 ## Personalization primitives (what the system adapts)
+
+### Purpose Presets v0
+
+v0 adds local Purpose Presets so an actor can pick a deterministic planning bias without custom code.
+
+Preset capabilities:
+- restrict planner candidates to a preset `pack_allowlist` (when non-empty)
+- weight quest ranking using preset `pillar_weights`
+- weight cadence preference (`daily`, `weekly`, `monthly`)
+
+Preset safety rules:
+- selection-only influence; no execution directives
+- no capability escalation; Safe Mode defaults remain unchanged
+- explicit confirmation gates remain required for Authorized Mode actions
+
+Preset surfaces:
+- files: `presets/v0/*.preset.yaml`
+- schema: `presets/schema/preset.schema.json`
+- CLI/API/MCP endpoints defined in `API_SURFACE.md`
 
 ### 1) Quest selection
 Pick which quests are in today’s set based on:
@@ -176,6 +195,7 @@ Example heuristic:
 - If weekly/monthly quests are due, include at least one due item in the daily mix when feasible.
 - If risk footprint high, add a 4th security quest.
 - If completion drop-off, reduce difficulty and rotate to easier quests.
+- If a preset is applied, rank candidate quests by preset pillar/cadence weights before deterministic tie-breaks.
 
 ---
 

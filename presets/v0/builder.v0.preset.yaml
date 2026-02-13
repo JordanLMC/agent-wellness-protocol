@@ -1,0 +1,28 @@
+schema_version: "0.1"
+preset_id: "builder.v0"
+name: "Builder"
+description: "Bias planning toward reliability, integration hygiene, and secure build posture."
+intended_for: "agent"
+pack_allowlist:
+  - "wellness.core.v0"
+  - "wellness.security_access_control.v0"
+  - "wellness.reliability_robustness.v0"
+  - "wellness.tool_integration_hygiene.v0"
+  - "wellness.home_security.v0"
+pillar_weights:
+  Reliability & Robustness: 1.0
+  Tool / Integration Hygiene: 0.9
+  Security & Access Control: 0.8
+  Memory & Context Hygiene: 0.5
+  Identity & Authenticity: 0.4
+cadence:
+  daily_weight: 1.6
+  weekly_weight: 1.1
+  monthly_weight: 0.8
+default_proof_tier: "P1"
+capability_policy:
+  allow_capability_grants: false
+  require_confirmations: true
+telemetry_tags:
+  - "preset:builder.v0"
+  - "persona:builder"

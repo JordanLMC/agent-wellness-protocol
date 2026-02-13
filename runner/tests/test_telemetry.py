@@ -259,6 +259,8 @@ def test_telemetry_diff_reports_expected_deltas(tmp_path: Path) -> None:
                 "feedback_count": 1,
                 "feedback_by_component": {"proofs": 1},
                 "feedback_by_severity": {"medium": 1},
+                "completions_by_preset": {"builder.v0": 1},
+                "xp_by_preset": {"builder.v0": 30},
                 "quest_success_rate": 0.5,
                 "completions_by_actor_id": {"openclaw:moltfred": 1},
                 "top_quests_completed": [{"quest_id": "q1", "count": 1}],
@@ -281,6 +283,8 @@ def test_telemetry_diff_reports_expected_deltas(tmp_path: Path) -> None:
                 "feedback_count": 3,
                 "feedback_by_component": {"proofs": 2, "planner": 1},
                 "feedback_by_severity": {"medium": 2, "high": 1},
+                "completions_by_preset": {"builder.v0": 2, "security_steward.v0": 3},
+                "xp_by_preset": {"builder.v0": 40, "security_steward.v0": 50},
                 "quest_success_rate": 0.8,
                 "completions_by_actor_id": {"openclaw:moltfred": 3, "human:jordan": 2},
                 "top_quests_completed": [{"quest_id": "q1", "count": 2}, {"quest_id": "q2", "count": 2}],
@@ -298,6 +302,8 @@ def test_telemetry_diff_reports_expected_deltas(tmp_path: Path) -> None:
     assert changes["feedback_count_delta"] == 2
     assert changes["feedback_by_component_delta"]["planner"] == 1
     assert changes["completions_by_actor_id_delta"]["human:jordan"] == 2
+    assert changes["completions_by_preset_delta"]["security_steward.v0"] == 3
+    assert changes["xp_by_preset_delta"]["security_steward.v0"] == 50
     assert "Completions delta: 3" in diff["text"]
 
 
@@ -459,6 +465,7 @@ def test_export_summary_includes_pillar_and_pack_analytics(tmp_path: Path) -> No
         data={
             "quest_id": "wellness.security_access_control.permissions.delta_inventory.v1",
             "pack_id": "wellness.security_access_control.v0",
+            "applied_preset_id": "security_steward.v0",
             "pillars": ["Security & Access Control"],
             "proof_tier": "P1",
             "xp_awarded": 20,
@@ -490,6 +497,8 @@ def test_export_summary_includes_pillar_and_pack_analytics(tmp_path: Path) -> No
     assert summary["completions_by_pillar"]["Security & Access Control"] == 1
     assert summary["xp_by_pillar"]["Security & Access Control"] == 20
     assert summary["completions_by_pack"]["wellness.security_access_control.v0"] == 1
+    assert summary["completions_by_preset"]["security_steward.v0"] == 1
+    assert summary["xp_by_preset"]["security_steward.v0"] == 20
     assert summary["risk_flags_by_pillar"]["Security & Access Control"] == 1
     assert summary["quest_success_rate_by_pillar"]["Security & Access Control"] == 0.5
 

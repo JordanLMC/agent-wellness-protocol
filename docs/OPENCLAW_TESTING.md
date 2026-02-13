@@ -1,7 +1,7 @@
 # OPENCLAW_TESTING.md
 Version: v0.1
 Status: Draft
-Last updated: 2026-02-12
+Last updated: 2026-02-13
 Owner: Project Team
 
 ## Purpose
@@ -31,6 +31,9 @@ For capability grants, include both:
 
 ## Daily loop example
 
+0. Optionally apply a purpose preset first:
+   - `POST /v1/presets/apply` with body `{"preset_id":"builder.v0","actor_id":"openclaw:moltfred"}`
+   - include standard actor/trace headers
 1. Generate today’s plan:
    - `python -m clawspa_runner.cli plan --date 2026-02-11 --actor-id openclaw:moltfred`
 2. If running via API, request plan with headers:
@@ -101,6 +104,13 @@ Use this when a flow is confusing or fails:
 2. `Keep refs short and put longer context in summary/details.`
 3. `Never include secrets, tokens, passwords, or private keys.`
 4. `Use actor id openclaw:moltfred and include a trace-id so we can correlate safely.`
+
+## Preset quickstart (Moltfred)
+
+1. `Apply a preset before planning when you want a focused routine (for example builder.v0 or security_steward.v0).`
+2. `Generate the daily plan and confirm applied_preset_id appears in the response metadata.`
+3. `Complete one quest with redacted proof; never include secrets in refs or summaries.`
+4. `Export scorecard and telemetry summary to compare progress by preset over time.`
 
 ## Notes
 

@@ -15,6 +15,14 @@ from pathlib import Path
 from typing import Any
 
 from .paths import agent_home, ensure_home_dirs
+from .presets import (
+    PRESET_SCHEMA_VERSION,
+    load_presets,
+    preset_cadence_weights,
+    preset_pack_allowlist,
+    preset_pillar_weights,
+    summarize_preset,
+)
 from .quests import QuestRepository
 from .security import payload_contains_pii, payload_contains_secrets, payload_requests_raw_logs
 from .telemetry import (
@@ -192,6 +200,8 @@ def _default_human_profile() -> dict[str, Any]:
         "preferences": {"session_minutes_per_day": 10, "reminder_time_local": "09:00", "channels": ["runner_ui"], "tone": "friendly_familiar"},
         "constraints": {"never_allow": [], "sensitive_domains": []},
         "working_agreement": {"confirmation_required_for": ["exec:shell", "write:secrets_store", "net:scan_local"], "safe_mode_default": True},
+        "applied_preset": None,
+        "preset_overrides": {},
     }
 
 
@@ -218,6 +228,8 @@ def _default_agent_profile() -> dict[str, Any]:
         },
         "state": {"current_stressors": [], "recent_failures": [], "confidence_calibration": "prefer_uncertainty"},
         "preferences": {"tone": "friendly_familiar", "daily_focus": ["security", "purpose"], "learning_style": "short_drills"},
+        "applied_preset": None,
+        "preset_overrides": {},
     }
 
 
@@ -228,6 +240,7 @@ class RunnerService:
     repo_root: Path
     home: Path
     quests: QuestRepository
+    presets: dict[str, dict[str, Any]]
     dirs: dict[str, Path]
     telemetry: TelemetryLogger
 
@@ -238,8 +251,9 @@ class RunnerService:
         home = agent_home()
         dirs = ensure_home_dirs(home)
         quests = QuestRepository.from_repo_root(repo_root)
+        presets = load_presets(repo_root)
         telemetry = TelemetryLogger(events_path=dirs["telemetry"] / "events.jsonl", repo_root=repo_root)
-        service = cls(repo_root=repo_root, home=home, quests=quests, dirs=dirs, telemetry=telemetry)
+        service = cls(repo_root=repo_root, home=home, quests=quests, presets=presets, dirs=dirs, telemetry=telemetry)
         service._ensure_state_files()
         service.telemetry.log_event(
             "runner.started",
@@ -349,6 +363,17 @@ class RunnerService:
             return actor
         return "system"
 
+    def _profile_kind_for_actor(self, actor: str, actor_id: str | None) -> str:
+        normalized_actor = self._normalize_actor(actor)
+        if normalized_actor in {"human", "agent"}:
+            return normalized_actor
+        normalized_actor_id = sanitize_actor_id(actor_id)
+        if normalized_actor_id.startswith("human:"):
+            return "human"
+        if normalized_actor_id.startswith("agent:"):
+            return "agent"
+        return "agent"
+
     def _normalize_source(self, source: str) -> str:
         if source in {"cli", "api", "mcp"}:
             return source
@@ -356,6 +381,38 @@ class RunnerService:
 
     def _normalize_actor_id(self, actor_id: str | None) -> str:
         return sanitize_actor_id(actor_id)
+
+    def _public_preset(self, preset: dict[str, Any]) -> dict[str, Any]:
+        return summarize_preset(preset)
+
+    def _profile_applied_preset(self, profile_kind: str) -> dict[str, Any] | None:
+        profile = self.get_profile(profile_kind)
+        applied = profile.get("applied_preset")
+        if not isinstance(applied, dict):
+            return None
+        preset_id = applied.get("preset_id")
+        if not isinstance(preset_id, str):
+            return None
+        preset = self.presets.get(preset_id)
+        if preset is None:
+            return None
+        intended_for = str(preset.get("intended_for", "both"))
+        if intended_for not in {"both", profile_kind}:
+            return None
+        return preset
+
+    def _active_preset_for_actor(self, actor: str, actor_id: str | None) -> dict[str, Any] | None:
+        profile_kind = self._profile_kind_for_actor(actor, actor_id)
+        return self._profile_applied_preset(profile_kind)
+
+    def _applied_preset_id_for_actor(self, actor: str, actor_id: str | None) -> str | None:
+        preset = self._active_preset_for_actor(actor, actor_id)
+        if preset is None:
+            return None
+        preset_id = preset.get("preset_id")
+        if isinstance(preset_id, str) and preset_id:
+            return preset_id
+        return None
 
     def _emit_event(
         self,
@@ -770,6 +827,98 @@ class RunnerService:
             "warn_count": warn_count,
         }
 
+    def list_presets(self) -> list[dict[str, Any]]:
+        """Return all available purpose presets in deterministic order."""
+
+        rows = [self._public_preset(preset) for preset in self.presets.values()]
+        rows.sort(key=lambda row: str(row.get("preset_id")))
+        return rows
+
+    def get_preset(self, preset_id: str) -> dict[str, Any]:
+        """Return one preset definition by identifier."""
+
+        preset = self.presets.get(preset_id)
+        if preset is None:
+            raise KeyError(f"Unknown preset_id: {preset_id}")
+        return self._public_preset(preset)
+
+    def apply_preset(
+        self,
+        preset_id: str,
+        *,
+        source: str = "cli",
+        actor: str = "agent",
+        actor_id: str = "unknown",
+        trace_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Apply one preset to the actor's profile for deterministic planning hints."""
+
+        preset = self.presets.get(preset_id)
+        if preset is None:
+            raise KeyError(f"Unknown preset_id: {preset_id}")
+        profile_kind = self._profile_kind_for_actor(actor, actor_id)
+        profile = self.get_profile(profile_kind)
+        profile["applied_preset"] = {
+            "schema_version": PRESET_SCHEMA_VERSION,
+            "preset_id": preset_id,
+            "applied_at": _now_iso(),
+        }
+        if not isinstance(profile.get("preset_overrides"), dict):
+            profile["preset_overrides"] = {}
+        updated_profile = self.put_profile(
+            profile_kind,
+            profile,
+            source=source,
+            actor=actor,
+            actor_id=actor_id,
+            trace_id=trace_id,
+        )
+        self._emit_event(
+            "preset.applied",
+            actor=actor,
+            actor_id=actor_id,
+            source=source,
+            trace_id=trace_id,
+            data={
+                "preset_id": preset_id,
+                "profile_kind": profile_kind,
+                "pack_allowlist_count": len(preset_pack_allowlist(preset)),
+                "telemetry_tags": [tag for tag in preset.get("telemetry_tags", []) if isinstance(tag, str)],
+            },
+        )
+        return {
+            "schema_version": PRESET_SCHEMA_VERSION,
+            "actor": {"kind": self._normalize_actor(actor), "id": self._normalize_actor_id(actor_id)},
+            "profile_kind": profile_kind,
+            "applied_preset": updated_profile.get("applied_preset"),
+            "preset": self._public_preset(preset),
+        }
+
+    def show_preset(
+        self,
+        *,
+        actor: str = "agent",
+        actor_id: str = "unknown",
+    ) -> dict[str, Any]:
+        """Return the actor profile's applied preset plus effective deterministic weights."""
+
+        profile_kind = self._profile_kind_for_actor(actor, actor_id)
+        profile = self.get_profile(profile_kind)
+        applied = profile.get("applied_preset")
+        preset: dict[str, Any] | None = None
+        if isinstance(applied, dict):
+            preset_id = applied.get("preset_id")
+            if isinstance(preset_id, str):
+                preset = self.presets.get(preset_id)
+        return {
+            "schema_version": PRESET_SCHEMA_VERSION,
+            "actor": {"kind": self._normalize_actor(actor), "id": self._normalize_actor_id(actor_id)},
+            "profile_kind": profile_kind,
+            "applied_preset": applied if isinstance(applied, dict) else None,
+            "preset": self._public_preset(preset) if preset is not None else None,
+            "preset_overrides": profile.get("preset_overrides", {}),
+        }
+
     def list_quests(self) -> dict[str, dict[str, Any]]:
         """Load validated quests, refusing to serve content with lint errors."""
 
@@ -905,6 +1054,29 @@ class RunnerService:
                 return quest
         return None
 
+    def _preset_sort_key(
+        self,
+        quest: dict[str, Any],
+        *,
+        key: str,
+        actor_id: str,
+        pillar_weights: dict[str, float],
+        cadence_weights: dict[str, float],
+    ) -> tuple[Any, ...]:
+        q = quest.get("quest", {})
+        quest_id = str(q.get("id", ""))
+        pillars = [item for item in q.get("pillars", []) if isinstance(item, str)]
+        cadence = str(q.get("cadence", "daily"))
+        pillar_score = max((pillar_weights.get(pillar, 0.0) for pillar in pillars), default=0.0)
+        cadence_score = cadence_weights.get(cadence, cadence_weights.get("daily", 0.0))
+        cadence_priority = {"daily": 0, "weekly": 1, "monthly": 2, "ad-hoc": 3}
+        return (
+            -pillar_score,
+            -cadence_score,
+            cadence_priority.get(cadence, 9),
+            hashlib.sha256(f"{key}:{actor_id}:{quest_id}".encode("utf-8")).hexdigest(),
+        )
+
     def _plan_quest_metadata(self, quest: dict[str, Any]) -> dict[str, Any]:
         q = quest.get("quest", {})
         proof = q.get("proof", {})
@@ -936,6 +1108,7 @@ class RunnerService:
         }
 
     def _ensure_plan_metadata(self, plan: dict[str, Any]) -> dict[str, Any]:
+        plan.setdefault("applied_preset_id", None)
         quest_metadata = plan.get("quest_metadata")
         if isinstance(quest_metadata, list) and quest_metadata:
             return plan
@@ -975,20 +1148,39 @@ class RunnerService:
             if not self._quest_due_for_date(quest, target_date, score_state):
                 continue
             all_due.append(quest)
+
+        active_preset = self._active_preset_for_actor(actor, actor_id)
+        active_preset_id = self._applied_preset_id_for_actor(actor, actor_id)
+        if active_preset is not None:
+            allowlist = preset_pack_allowlist(active_preset)
+            if allowlist:
+                all_due = [quest for quest in all_due if quest.get("_pack") in allowlist]
         if not all_due:
             raise ValueError("No due quests available for planning.")
 
         key = target_date.isoformat()
         dropoff = self._completion_dropoff_detected(target_date)
         risk_high = self._risk_footprint_high()
-        cadence_priority = {"monthly": 0, "weekly": 1, "daily": 2, "ad-hoc": 3}
-        ranked = sorted(
-            all_due,
-            key=lambda q: (
-                cadence_priority.get(q.get("quest", {}).get("cadence", "daily"), 9),
-                hashlib.sha256(f"{key}:{actor_id}:{q['quest']['id']}".encode("utf-8")).hexdigest(),
-            ),
-        )
+        if active_preset is not None:
+            ranked = sorted(
+                all_due,
+                key=lambda quest: self._preset_sort_key(
+                    quest,
+                    key=key,
+                    actor_id=actor_id,
+                    pillar_weights=preset_pillar_weights(active_preset),
+                    cadence_weights=preset_cadence_weights(active_preset),
+                ),
+            )
+        else:
+            cadence_priority = {"monthly": 0, "weekly": 1, "daily": 2, "ad-hoc": 3}
+            ranked = sorted(
+                all_due,
+                key=lambda q: (
+                    cadence_priority.get(q.get("quest", {}).get("cadence", "daily"), 9),
+                    hashlib.sha256(f"{key}:{actor_id}:{q['quest']['id']}".encode("utf-8")).hexdigest(),
+                ),
+            )
         if dropoff:
             easier = [q for q in ranked if int(q.get("quest", {}).get("difficulty", 1)) <= 2]
             if easier:
@@ -1030,6 +1222,7 @@ class RunnerService:
         plan = {
             "date": key,
             "generated_at": _now_iso(),
+            "applied_preset_id": active_preset_id,
             "quest_ids": [quest["quest"]["id"] for quest in selected[:5]],
             "quests": selected[:5],
             "quest_metadata": [self._plan_quest_metadata(quest) for quest in selected[:5]],
@@ -1045,6 +1238,7 @@ class RunnerService:
                 "date": key,
                 "quest_ids": plan["quest_ids"],
                 "quest_count": len(plan["quest_ids"]),
+                "applied_preset_id": active_preset_id,
                 "dropoff_mode": dropoff,
                 "risk_footprint_high": risk_high,
                 "cadences": sorted(
@@ -1119,14 +1313,33 @@ class RunnerService:
             if not self._quest_due_for_date(quest, target_date, score_state):
                 continue
             candidates.append(quest)
+
+        active_preset = self._active_preset_for_actor(actor, actor_id)
+        active_preset_id = self._applied_preset_id_for_actor(actor, actor_id)
+        if active_preset is not None:
+            allowlist = preset_pack_allowlist(active_preset)
+            if allowlist:
+                candidates = [quest for quest in candidates if quest.get("_pack") in allowlist]
         if not candidates:
             raise ValueError("No due weekly/monthly quests available for planning.")
 
         key = f"{target_date.isoformat()}:{_iso_week(target_date)}"
-        ranked = sorted(
-            candidates,
-            key=lambda q: hashlib.sha256(f"{key}:{actor_id}:{q['quest']['id']}".encode("utf-8")).hexdigest(),
-        )
+        if active_preset is not None:
+            ranked = sorted(
+                candidates,
+                key=lambda quest: self._preset_sort_key(
+                    quest,
+                    key=key,
+                    actor_id=actor_id,
+                    pillar_weights=preset_pillar_weights(active_preset),
+                    cadence_weights=preset_cadence_weights(active_preset),
+                ),
+            )
+        else:
+            ranked = sorted(
+                candidates,
+                key=lambda q: hashlib.sha256(f"{key}:{actor_id}:{q['quest']['id']}".encode("utf-8")).hexdigest(),
+            )
         selected: list[dict[str, Any]] = []
         security = next((q for q in ranked if self._bucket(q) == "security"), None)
         if security is not None:
@@ -1146,6 +1359,7 @@ class RunnerService:
             "week": week_key,
             "anchor_date": target_date.isoformat(),
             "generated_at": _now_iso(),
+            "applied_preset_id": active_preset_id,
             "quest_ids": [quest["quest"]["id"] for quest in selected[:3]],
             "quests": selected[:3],
             "quest_metadata": [self._plan_quest_metadata(quest) for quest in selected[:3]],
@@ -1162,6 +1376,7 @@ class RunnerService:
                 "week": week_key,
                 "quest_ids": plan["quest_ids"],
                 "quest_count": len(plan["quest_ids"]),
+                "applied_preset_id": active_preset_id,
                 "pillars": sorted(
                     {
                         pillar
@@ -1297,6 +1512,7 @@ class RunnerService:
 
         actor = self._normalize_actor(actor_mode)
         source = self._normalize_source(source)
+        applied_preset_id = self._applied_preset_id_for_actor(actor, actor_id)
         resolved_pillars: list[str] = []
         resolved_pack_id: str | None = None
 
@@ -1319,6 +1535,7 @@ class RunnerService:
                     "quest_id": quest_id,
                     "pack_id": resolved_pack_id,
                     "pillars": resolved_pillars,
+                    "applied_preset_id": applied_preset_id,
                     "reason": reason,
                     "detail_hash": hashlib.sha256(message.encode("utf-8")).hexdigest(),
                 },
@@ -1327,6 +1544,7 @@ class RunnerService:
                 "quest_id": quest_id,
                 "pack_id": resolved_pack_id,
                 "pillars": resolved_pillars,
+                "applied_preset_id": applied_preset_id,
                 "reason": reason,
                 "code": code,
             }
@@ -1509,6 +1727,7 @@ class RunnerService:
                 "quest_id": quest_id,
                 "pack_id": pack_id,
                 "pillars": pillars,
+                "applied_preset_id": applied_preset_id,
                 "proof_tier": tier,
                 "artifact_count": len(proof_artifact_meta),
                 "artifacts": proof_artifact_meta,
@@ -1615,6 +1834,7 @@ class RunnerService:
                 "quest_id": quest_id,
                 "pack_id": pack_id,
                 "pillars": pillars,
+                "applied_preset_id": applied_preset_id,
                 "proof_tier": tier,
                 "risk_level": q.get("risk_level"),
                 "mode_used": mode_used,
@@ -1987,11 +2207,15 @@ class RunnerService:
     def telemetry_export(self, range_value: str, out_path: Path, actor_id: str | None = None) -> dict[str, Any]:
         """Export aggregated telemetry for the requested window and optional actor id."""
 
+        applied_preset_id = None
+        if actor_id is not None:
+            applied_preset_id = self._applied_preset_id_for_actor("system", actor_id)
         return self.telemetry.export_summary(
             range_value=range_value,
             score_state=self._load_score_state(),
             out_path=out_path,
             actor_id=actor_id,
+            applied_preset_id=applied_preset_id,
         )
 
     def telemetry_snapshot(
@@ -2015,6 +2239,7 @@ class RunnerService:
             score_state=self._load_score_state(),
             out_path=out_path,
             actor_id=actor_id,
+            applied_preset_id=self._applied_preset_id_for_actor("system", actor_id) if actor_id is not None else None,
         )
         return {
             "path": str(out_path),
@@ -2065,7 +2290,13 @@ class RunnerService:
         target = paths[profile_kind]
         if not target.exists():
             self.init_profiles()
-        return _load_json(target, {})
+        profile = _load_json(target, {})
+        if isinstance(profile, dict) and profile_kind in {"human", "agent"}:
+            if "applied_preset" not in profile:
+                profile["applied_preset"] = None
+            if not isinstance(profile.get("preset_overrides"), dict):
+                profile["preset_overrides"] = {}
+        return profile
 
     def put_profile(
         self,

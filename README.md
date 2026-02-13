@@ -15,6 +15,7 @@ ClawSpa is a local-first Agent Wellness System for persistent, identity-bearing,
 - Setup overview (single source of truth): `docs/SETUP.md`
 - macOS setup: `docs/SETUP_MAC.md`
 - Windows setup (WSL2 + PowerShell): `docs/SETUP_WINDOWS.md`
+- Purpose presets overview: `docs/PRESETS.md`
 
 ## Safety posture
 

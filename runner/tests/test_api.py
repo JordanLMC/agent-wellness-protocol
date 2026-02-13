@@ -124,6 +124,51 @@ def test_profiles_endpoints_get_put_and_alignment_snapshot(tmp_path: Path) -> No
     assert generated.json()["schema_version"] == "0.1"
 
 
+def test_presets_endpoints_list_get_apply(tmp_path: Path) -> None:
+    _, client = _service_and_client(tmp_path)
+
+    listing = client.get("/v1/presets")
+    assert listing.status_code == 200
+    payload = listing.json()
+    assert any(item.get("preset_id") == "builder.v0" for item in payload)
+
+    one = client.get("/v1/presets/builder.v0")
+    assert one.status_code == 200
+    assert one.json()["preset_id"] == "builder.v0"
+
+    missing = client.get("/v1/presets/missing.v0")
+    assert missing.status_code == 404
+
+    applied = client.post(
+        "/v1/presets/apply",
+        headers={
+            "X-Clawspa-Source": "mcp",
+            "X-Clawspa-Actor": "agent",
+            "X-Clawspa-Actor-Id": "openclaw:moltfred",
+            "X-Clawspa-Trace-Id": "mcp:preset-apply-api",
+        },
+        json={"preset_id": "builder.v0", "actor_id": "agent:ignored-by-header"},
+    )
+    assert applied.status_code == 200
+    applied_payload = applied.json()
+    assert applied_payload["applied_preset"]["preset_id"] == "builder.v0"
+    assert applied_payload["actor"] == {"kind": "agent", "id": "openclaw:moltfred"}
+    assert applied.headers.get("x-clawspa-trace-id") == "mcp:preset-apply-api"
+
+    plan = client.post(
+        "/v1/plans/daily/generate",
+        params={"date": "2026-02-13"},
+        headers={
+            "X-Clawspa-Source": "mcp",
+            "X-Clawspa-Actor": "agent",
+            "X-Clawspa-Actor-Id": "openclaw:moltfred",
+            "X-Clawspa-Trace-Id": "mcp:preset-plan-api",
+        },
+    )
+    assert plan.status_code == 200
+    assert plan.json()["applied_preset_id"] == "builder.v0"
+
+
 def test_capability_grant_requires_ticket_token(tmp_path: Path) -> None:
     _, client = _service_and_client(tmp_path)
     response = client.post(

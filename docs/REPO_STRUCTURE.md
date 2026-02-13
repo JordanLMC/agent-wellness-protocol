@@ -32,10 +32,18 @@ Define a repo layout that:
     CONTRIBUTING.md
     TELEMETRY.md
     PACKS.md
+    PRESETS.md
     SETUP.md
     SETUP_MAC.md
     SETUP_WINDOWS.md
     OPENCLAW_TESTING.md
+
+  /presets/
+    README.md
+    /schema/
+      preset.schema.json      # Purpose Preset validation schema
+    /v0/
+      *.preset.yaml           # versioned local planning presets
 
   /research/
     *.pdf                     # local research artifacts for quest and pillar design
@@ -139,6 +147,11 @@ Must answer in 60 seconds:
 ### Setup docs
 - `docs/SETUP.md` is the setup source of truth.
 - `docs/SETUP_MAC.md` and `docs/SETUP_WINDOWS.md` provide platform-specific steps.
+
+### Presets
+- Purpose Presets live under `/presets` and are validated by `preset.schema.json`.
+- Presets only influence deterministic planning weights and pack allowlists.
+- Presets never grant authority or capabilities.
 
 ### SECURITY.md
 - reporting process

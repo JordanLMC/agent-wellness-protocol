@@ -90,6 +90,25 @@ TOOL_SCHEMAS = [
         },
     },
     {
+        "name": "list_presets",
+        "description": "List available purpose presets.",
+        "input_schema": {
+            "type": "object",
+            "properties": {"actor_id": {"type": "string"}, "trace_id": {"type": "string"}},
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "apply_preset",
+        "description": "Apply one purpose preset to the target actor profile.",
+        "input_schema": {
+            "type": "object",
+            "properties": {"preset_id": {"type": "string"}, "actor_id": {"type": "string"}, "trace_id": {"type": "string"}},
+            "required": ["preset_id"],
+            "additionalProperties": False,
+        },
+    },
+    {
         "name": "update_agent_profile",
         "description": "Patch and update agent profile fields.",
         "input_schema": {
@@ -215,6 +234,11 @@ class MCPBridge:
                     trace_id=trace_id,
                 ),
             }
+        if name == "list_presets":
+            return self._request("GET", "/v1/presets", actor_id=actor_id, trace_id=trace_id)
+        if name == "apply_preset":
+            payload = {"preset_id": arguments["preset_id"], "actor_id": actor_id}
+            return self._request("POST", "/v1/presets/apply", body=payload, actor_id=actor_id, trace_id=trace_id)
         if name == "update_agent_profile":
             current = self._request("GET", "/v1/profiles/agent", actor_id=actor_id, trace_id=trace_id)
             merged = deep_merge(current, arguments.get("profile_patch", {}))
@@ -381,6 +405,15 @@ def validate_tool_arguments(name: str, arguments: dict[str, Any]) -> None:
                     raise ValueError(f"tags[{idx}] must be a string.")
                 _validate_safe_text(tag, field=f"tags[{idx}]", max_length=40)
         return
+    if name == "apply_preset":
+        allowed = {"preset_id", "actor_id", "trace_id"}
+        if any(key not in allowed for key in arguments):
+            raise ValueError("apply_preset accepts preset_id, actor_id, and trace_id only.")
+        preset_id = arguments.get("preset_id")
+        if not isinstance(preset_id, str) or not re.match(r"^[a-z0-9][a-z0-9._-]{1,79}$", preset_id):
+            raise ValueError("preset_id must be a valid preset identifier.")
+        _validate_safe_text(preset_id, field="preset_id", max_length=80)
+        return
     if name == "get_feedback_summary":
         allowed = {"range", "actor_id", "trace_id"}
         if any(key not in allowed for key in arguments):
@@ -400,7 +433,7 @@ def validate_tool_arguments(name: str, arguments: dict[str, Any]) -> None:
         for string_value in _iter_strings(patch):
             _validate_safe_text(string_value, field="profile_patch", max_length=MAX_STRING_LENGTH)
         return
-    if name in {"get_scorecard", "get_profiles"}:
+    if name in {"get_scorecard", "get_profiles", "list_presets"}:
         allowed = {"actor_id", "trace_id"}
         if any(key not in allowed for key in arguments):
             raise ValueError(f"{name} does not accept arguments.")

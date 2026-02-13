@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import sys
 from datetime import date
 from pathlib import Path
 from uuid import uuid4
@@ -62,6 +63,17 @@ def main() -> int:
     profile_cmd = sub.add_parser("profile", help="Profile operations")
     profile_sub = profile_cmd.add_subparsers(dest="profile_command", required=True)
     profile_sub.add_parser("init", help="Initialize local profile files")
+
+    preset_cmd = sub.add_parser("preset", help="Purpose preset operations")
+    preset_sub = preset_cmd.add_subparsers(dest="preset_command", required=True)
+    preset_sub.add_parser("list", help="List available presets")
+    preset_show = preset_sub.add_parser("show", help="Show applied preset for an actor profile")
+    preset_show.add_argument("--actor", default="agent", choices=["human", "agent", "system"])
+    preset_show.add_argument("--actor-id", default=default_actor_id, help="Actor identifier for profile resolution")
+    preset_apply = preset_sub.add_parser("apply", help="Apply a preset to an actor profile")
+    preset_apply.add_argument("preset_id", help="Preset identifier (for example builder.v0)")
+    preset_apply.add_argument("--actor", default="agent", choices=["human", "agent", "system"])
+    preset_apply.add_argument("--actor-id", default=default_actor_id, help="Actor identifier for profile resolution")
 
     api_cmd = sub.add_parser("api", help="Run local API server")
     api_cmd.add_argument("--host", default="127.0.0.1")
@@ -189,6 +201,33 @@ def main() -> int:
     if args.command == "profile":
         if args.profile_command == "init":
             print(json.dumps(service.init_profiles(), indent=2))
+            return 0
+
+    if args.command == "preset":
+        if args.preset_command == "list":
+            print(json.dumps(service.list_presets(), indent=2))
+            return 0
+        if args.preset_command == "show":
+            print(
+                json.dumps(
+                    service.show_preset(actor=args.actor, actor_id=args.actor_id),
+                    indent=2,
+                )
+            )
+            return 0
+        if args.preset_command == "apply":
+            print(
+                json.dumps(
+                    service.apply_preset(
+                        args.preset_id,
+                        source="cli",
+                        actor=args.actor,
+                        actor_id=args.actor_id,
+                        trace_id=trace_id,
+                    ),
+                    indent=2,
+                )
+            )
             return 0
 
     if args.command == "api":

@@ -1,0 +1,26 @@
+schema_version: "0.1"
+preset_id: "task_manager.v0"
+name: "Task Manager"
+description: "Focus on low-risk cadence discipline, execution hygiene, and consistent follow-through."
+intended_for: "both"
+pack_allowlist:
+  - "wellness.core.v0"
+  - "wellness.reliability_robustness.v0"
+  - "wellness.transparency_auditability.v0"
+pillar_weights:
+  Identity & Authenticity: 1.0
+  Memory & Context Hygiene: 0.9
+  Reliability & Robustness: 0.8
+  User Experience & Trust Calibration: 0.8
+  Security & Access Control: 0.6
+cadence:
+  daily_weight: 1.8
+  weekly_weight: 1.0
+  monthly_weight: 0.7
+default_proof_tier: "P0"
+capability_policy:
+  allow_capability_grants: false
+  require_confirmations: true
+telemetry_tags:
+  - "preset:task_manager.v0"
+  - "persona:task_manager"

@@ -1,0 +1,106 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://clawspa.local/schema/preset.schema.json",
+  "title": "ClawSpa Purpose Preset",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "preset_id",
+    "name",
+    "description",
+    "intended_for",
+    "pack_allowlist",
+    "pillar_weights",
+    "cadence",
+    "capability_policy",
+    "telemetry_tags"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "0.1"
+    },
+    "preset_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]{1,79}$"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 120
+    },
+    "description": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 500
+    },
+    "intended_for": {
+      "type": "string",
+      "enum": ["agent", "human", "both"]
+    },
+    "pack_allowlist": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z0-9][a-z0-9._-]{2,159}$"
+      },
+      "uniqueItems": true
+    },
+    "pillar_weights": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "type": "number",
+        "minimum": 0
+      }
+    },
+    "cadence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["daily_weight", "weekly_weight", "monthly_weight"],
+      "properties": {
+        "daily_weight": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "weekly_weight": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "monthly_weight": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        }
+      }
+    },
+    "default_proof_tier": {
+      "type": "string",
+      "enum": ["P0", "P1", "P2"]
+    },
+    "capability_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["allow_capability_grants", "require_confirmations"],
+      "properties": {
+        "allow_capability_grants": {
+          "type": "boolean",
+          "const": false
+        },
+        "require_confirmations": {
+          "type": "boolean",
+          "const": true
+        }
+      }
+    },
+    "telemetry_tags": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 80
+      },
+      "uniqueItems": true
+    }
+  }
+}

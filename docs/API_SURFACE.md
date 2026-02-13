@@ -1,7 +1,7 @@
 # API_SURFACE.md
 Version: v0.1  
 Status: Draft  
-Last updated: 2026-02-12  
+Last updated: 2026-02-13  
 Owner: Project Team  
 
 ## Purpose
@@ -89,6 +89,14 @@ Trace-id behavior:
 - `POST /v1/profiles/alignment_snapshot/generate`
   - v0.1 can be heuristic; later AI-assisted
 
+### Presets
+- `GET /v1/presets`
+- `GET /v1/presets/{preset_id}`
+- `POST /v1/presets/apply`
+  - body: `preset_id`, optional `actor_id`
+  - actor resolution still follows header/body precedence
+  - applies preset metadata to the resolved actor profile (`human` or `agent`)
+
 ### Plans (daily/weekly)
 - `GET /v1/plans/daily?date=YYYY-MM-DD`
 - `POST /v1/plans/daily/generate?date=YYYY-MM-DD`
@@ -96,6 +104,7 @@ Trace-id behavior:
 - `POST /v1/plans/weekly/generate?date=YYYY-MM-DD`
   - v0.1: rule-based picker
   - later: AI planner selects from curated quests
+  - includes optional `applied_preset_id` when a preset is active for the actor profile
   - response includes `quest_metadata` rows per quest with:
     - `quest_id`
     - `title`
@@ -146,6 +155,10 @@ Unhandled internal errors return HTTP `500` with:
   - hash-chain verification via runner CLI
   - retention purge by range (older-than) via runner CLI
   - aggregated export/snapshot/diff via runner CLI
+  - aggregated export includes preset metrics:
+    - `applied_preset_id` (when filtered by actor id)
+    - `completions_by_preset`
+    - `xp_by_preset`
 - No raw telemetry event API endpoint is exposed by default.
 
 ### Feedback (local-first)
@@ -189,6 +202,8 @@ The MCP server should expose tools that map cleanly to the API:
 - `submit_proof(quest_id, artifacts, tier)` → `POST /v1/proofs`
 - `submit_feedback(severity, component, title, ...)` → `POST /v1/feedback`
 - `get_feedback_summary(range?, actor_id?)` → `GET /v1/feedback/summary`
+- `list_presets()` → `GET /v1/presets`
+- `apply_preset(preset_id, actor_id?)` → `POST /v1/presets/apply`
 - `get_scorecard()` → `GET /v1/scorecard`
 - `get_profiles()` → `GET /v1/profiles/*`
 - `update_agent_profile(profile_patch)` → `PUT /v1/profiles/agent`

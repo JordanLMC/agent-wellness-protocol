@@ -35,6 +35,7 @@ VALID_EVENT_TYPES = {
     "capability.granted",
     "capability.revoked",
     "feedback.submitted",
+    "preset.applied",
     "risk.flagged",
     "telemetry.purged",
     "trust_signal.updated",
@@ -675,6 +676,7 @@ class TelemetryLogger:
         score_state: dict[str, Any],
         out_path: Path | None = None,
         actor_id: str | None = None,
+        applied_preset_id: str | None = None,
     ) -> dict[str, Any]:
         """Aggregate windowed telemetry metrics, optionally filtered by actor id."""
 
@@ -760,6 +762,8 @@ class TelemetryLogger:
         completions_by_pillar: Counter[str] = Counter()
         xp_by_pillar: Counter[str] = Counter()
         completions_by_pack: Counter[str] = Counter()
+        completions_by_preset: Counter[str] = Counter()
+        xp_by_preset: Counter[str] = Counter()
         risk_flags_by_pillar: Counter[str] = Counter()
         attempts_by_pillar: Counter[str] = Counter()
         successes_by_pillar: Counter[str] = Counter()
@@ -771,6 +775,13 @@ class TelemetryLogger:
             awarded = int(data.get("xp_awarded", 0)) if isinstance(data, dict) else 0
             pack_id = _resolve_pack(event)
             completions_by_pack[pack_id] += 1
+            preset_id = "none"
+            if isinstance(data, dict):
+                raw_preset_id = data.get("applied_preset_id")
+                if isinstance(raw_preset_id, str) and raw_preset_id:
+                    preset_id = raw_preset_id
+            completions_by_preset[preset_id] += 1
+            xp_by_preset[preset_id] += awarded
             for pillar in _resolve_pillars(event):
                 completions_by_pillar[pillar] += 1
                 xp_by_pillar[pillar] += awarded
@@ -816,6 +827,7 @@ class TelemetryLogger:
             "generated_at": _utc_now_rfc3339(),
             "range": range_value,
             "actor_id_filter": actor_filter,
+            "applied_preset_id": applied_preset_id,
             "window_start": start.replace(microsecond=0).isoformat().replace("+00:00", "Z"),
             "window_end": end.replace(microsecond=0).isoformat().replace("+00:00", "Z"),
             "events_considered": len(in_window),
@@ -830,6 +842,8 @@ class TelemetryLogger:
             "completions_by_pillar": dict(sorted(completions_by_pillar.items())),
             "xp_by_pillar": dict(sorted(xp_by_pillar.items())),
             "completions_by_pack": dict(sorted(completions_by_pack.items())),
+            "completions_by_preset": dict(sorted(completions_by_preset.items())),
+            "xp_by_preset": dict(sorted(xp_by_preset.items())),
             "daily_streak": int(score_state.get("daily_streak", 0)),
             "weekly_streak": int(score_state.get("weekly_streak", 0)),
             "total_xp": int(score_state.get("total_xp", 0)),
@@ -983,6 +997,8 @@ def diff_aggregated_summaries(a: dict[str, Any], b: dict[str, Any]) -> dict[str,
             "completions_by_pillar_delta": _counter_delta("completions_by_pillar"),
             "xp_by_pillar_delta": _counter_delta("xp_by_pillar"),
             "completions_by_pack_delta": _counter_delta("completions_by_pack"),
+            "completions_by_preset_delta": _counter_delta("completions_by_preset"),
+            "xp_by_preset_delta": _counter_delta("xp_by_preset"),
             "risk_flags_by_pillar_delta": _counter_delta("risk_flags_by_pillar"),
             "feedback_by_component_delta": _counter_delta("feedback_by_component"),
             "feedback_by_severity_delta": _counter_delta("feedback_by_severity"),

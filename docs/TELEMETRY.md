@@ -37,6 +37,7 @@ Every event includes:
   - `capability.granted`
   - `capability.revoked`
   - `feedback.submitted`
+  - `preset.applied`
   - `risk.flagged`
   - `telemetry.purged`
   - `trust_signal.updated`
@@ -144,6 +145,9 @@ Range format:
 - `completions_by_pillar`
 - `xp_by_pillar`
 - `completions_by_pack`
+- `applied_preset_id` (when export is actor-filtered)
+- `completions_by_preset`
+- `xp_by_preset`
 - `events_by_actor_kind`
 - `events_by_actor_id`
 - `daily_streak`, `weekly_streak`, `total_xp`

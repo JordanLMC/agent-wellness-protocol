@@ -1,7 +1,7 @@
 # PROFILE_SCHEMA.md
 Version: v0.1  
 Status: Draft  
-Last updated: 2026-02-09  
+Last updated: 2026-02-13  
 Owner: Project Team  
 
 ## Purpose
@@ -85,7 +85,13 @@ Represents agreement/disagreement between human and agent profiles, plus action 
   "working_agreement": {
     "confirmation_required_for": ["exec:shell", "write:secrets_store", "net:scan_local"],
     "safe_mode_default": true
-  }
+  },
+  "applied_preset": {
+    "schema_version": "0.1",
+    "preset_id": "task_manager.v0",
+    "applied_at": "2026-02-13T00:00:00Z"
+  },
+  "preset_overrides": {}
 }
 ```
 
@@ -100,6 +106,8 @@ Represents agreement/disagreement between human and agent profiles, plus action 
 - `preferences.session_minutes_per_day` (optional): integer (default 10)
 - `constraints.never_allow` (optional): list of banned actions/capabilities
 - `working_agreement.confirmation_required_for` (optional): list of capabilities
+- `applied_preset` (optional): `{schema_version, preset_id, applied_at}` planning hint metadata
+- `preset_overrides` (optional): object reserved for future local tuning
 
 ---
 
@@ -151,7 +159,13 @@ Represents agreement/disagreement between human and agent profiles, plus action 
     "tone": "friendly_familiar",
     "daily_focus": ["security", "memory", "purpose"],
     "learning_style": "short_drills"
-  }
+  },
+  "applied_preset": {
+    "schema_version": "0.1",
+    "preset_id": "builder.v0",
+    "applied_at": "2026-02-13T00:00:00Z"
+  },
+  "preset_overrides": {}
 }
 ```
 
@@ -165,6 +179,8 @@ Represents agreement/disagreement between human and agent profiles, plus action 
 - `mission.self_reported_purpose` (required): string
 - `state.current_stressors` (optional): list of strings
 - `preferences.daily_focus` (optional): list of pillar slugs/topics
+- `applied_preset` (optional): `{schema_version, preset_id, applied_at}` planning hint metadata
+- `preset_overrides` (optional): object reserved for future local tuning
 
 ---
 

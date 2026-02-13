@@ -194,3 +194,59 @@ def test_mcp_submit_feedback_calls_feedback_endpoint(monkeypatch: pytest.MonkeyP
     assert captured["url"].endswith("/v1/feedback")
     assert captured["trace_id"] == "mcp:feedback-test"
     assert "\"component\": \"proofs\"" in captured["body"]
+
+
+def test_validate_tool_arguments_apply_preset_requires_valid_id() -> None:
+    with pytest.raises(ValueError, match="preset_id"):
+        validate_tool_arguments("apply_preset", {"preset_id": "Not Valid"})
+
+
+def test_mcp_list_presets_calls_presets_endpoint(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: dict[str, str] = {}
+
+    class _DummyResponse:
+        def __enter__(self) -> "_DummyResponse":
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> bool:
+            return False
+
+        def read(self) -> bytes:
+            return b"[]"
+
+    def _fake_urlopen(request, timeout=10):  # noqa: ANN001
+        captured["url"] = request.full_url
+        return _DummyResponse()
+
+    monkeypatch.setattr("clawspa_mcp.server.urlopen", _fake_urlopen)
+    bridge = MCPBridge("http://127.0.0.1:8000", actor_id="openclaw:moltfred")
+    bridge.call_tool("list_presets", {"trace_id": "mcp:preset-list"})
+    assert captured["url"].endswith("/v1/presets")
+
+
+def test_mcp_apply_preset_calls_apply_endpoint(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: dict[str, str] = {}
+
+    class _DummyResponse:
+        def __enter__(self) -> "_DummyResponse":
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> bool:
+            return False
+
+        def read(self) -> bytes:
+            return b"{}"
+
+    def _fake_urlopen(request, timeout=10):  # noqa: ANN001
+        captured["url"] = request.full_url
+        captured["body"] = request.data.decode("utf-8")
+        return _DummyResponse()
+
+    monkeypatch.setattr("clawspa_mcp.server.urlopen", _fake_urlopen)
+    bridge = MCPBridge("http://127.0.0.1:8000", actor_id="openclaw:moltfred")
+    bridge.call_tool(
+        "apply_preset",
+        {"preset_id": "builder.v0", "trace_id": "mcp:preset-apply"},
+    )
+    assert captured["url"].endswith("/v1/presets/apply")
+    assert "\"preset_id\": \"builder.v0\"" in captured["body"]

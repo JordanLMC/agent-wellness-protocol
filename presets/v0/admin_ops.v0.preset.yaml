@@ -1,0 +1,28 @@
+schema_version: "0.1"
+preset_id: "admin_ops.v0"
+name: "Admin Ops"
+description: "Prioritize governance, security, reliability, and operational cadence hygiene."
+intended_for: "both"
+pack_allowlist:
+  - "wellness.core.v0"
+  - "wellness.continuous_governance_oversight.v0"
+  - "wellness.security_access_control.v0"
+  - "wellness.reliability_robustness.v0"
+  - "wellness.transparency_auditability.v0"
+pillar_weights:
+  Continuous Governance & Oversight: 1.0
+  Security & Access Control: 0.9
+  Reliability & Robustness: 0.8
+  Transparency & Auditability: 0.8
+  Identity & Authenticity: 0.5
+cadence:
+  daily_weight: 1.2
+  weekly_weight: 1.4
+  monthly_weight: 1.2
+default_proof_tier: "P1"
+capability_policy:
+  allow_capability_grants: false
+  require_confirmations: true
+telemetry_tags:
+  - "preset:admin_ops.v0"
+  - "persona:admin_ops"

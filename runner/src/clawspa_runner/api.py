@@ -63,6 +63,13 @@ class FeedbackRequest(BaseModel):
     actor_id: str | None = Field(default=None, max_length=200)
 
 
+class PresetApplyRequest(BaseModel):
+    """Payload for `/v1/presets/apply` targeting one actor profile."""
+
+    preset_id: str = Field(min_length=1, max_length=120)
+    actor_id: str | None = Field(default=None, max_length=200)
+
+
 def create_app(service: RunnerService) -> FastAPI:
     """Create API routes backed by `RunnerService` with actor/source attribution."""
 
@@ -210,6 +217,33 @@ def create_app(service: RunnerService) -> FastAPI:
     @app.post("/v1/profiles/alignment_snapshot/generate")
     def generate_alignment_snapshot() -> dict[str, Any]:
         return service.generate_alignment_snapshot()
+
+    @app.get("/v1/presets")
+    def list_presets() -> list[dict[str, Any]]:
+        return service.list_presets()
+
+    @app.get("/v1/presets/{preset_id}")
+    def get_preset(preset_id: str) -> dict[str, Any]:
+        try:
+            return service.get_preset(preset_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.post("/v1/presets/apply")
+    def apply_preset(request: PresetApplyRequest, http_request: Request) -> dict[str, Any]:
+        try:
+            source, actor, actor_id = request_context(http_request, default_actor="agent", body_actor_id=request.actor_id)
+            return service.apply_preset(
+                request.preset_id,
+                source=source,
+                actor=actor,
+                actor_id=actor_id,
+                trace_id=request_trace_id(http_request),
+            )
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @app.get("/v1/plans/daily")
     def get_daily_plan(
