@@ -1,7 +1,7 @@
 # TELEMETRY.md
 Version: v0.1
 Status: Draft
-Last updated: 2026-02-12
+Last updated: 2026-02-13
 Owner: Project Team
 
 ## Purpose
@@ -68,6 +68,23 @@ Computation:
   - mismatched `prev_hash`,
   - mismatched recomputed `event_hash`,
   - malformed JSON.
+
+### Concurrency safety
+
+- Telemetry appends use a cross-process writer lock at `events.jsonl.lock` in the same directory.
+- Under the lock, the logger:
+  - reads the current tail row,
+  - derives `prev_hash` from the tail `event_hash`,
+  - appends one new row,
+  - flushes and fsyncs best-effort.
+- This prevents interleaving writes from API/CLI/MCP processes from producing broken chains during normal operation.
+
+### Failure semantics
+
+- `prev_hash_mismatch` means a row does not point to the immediate prior row's `event_hash`.
+- `missing_hash_fields` means at least one row is legacy/malformed and not hash-chained.
+- If the tail is legacy/malformed, new hashed events are refused until rotation/purge rewrites the log.
+- Use `runner telemetry purge --older-than <window>` (or manual local rotation) to recover to a valid chain.
 
 ## Data minimization and secret safety
 

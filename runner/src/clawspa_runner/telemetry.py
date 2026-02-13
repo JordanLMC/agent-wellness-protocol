@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import platform
 import re
 import subprocess
@@ -11,6 +12,7 @@ import sys
 import unicodedata
 import uuid
 from collections import Counter
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from importlib.metadata import PackageNotFoundError, version as package_version
@@ -42,6 +44,11 @@ VALID_SOURCES = {"cli", "api", "mcp"}
 MAX_STRING_LENGTH = 200
 RANGE_PATTERN = re.compile(r"^(\d+)([dh])$")
 GENESIS_PREV_HASH = "0" * 64
+
+if os.name == "nt":  # pragma: no cover - Windows-specific import path
+    import msvcrt
+else:  # pragma: no cover - POSIX-specific import path
+    import fcntl
 
 
 def _utc_now() -> datetime:
@@ -270,52 +277,148 @@ def detect_runner_version() -> str:
         return "0.1.0"
 
 
+class TelemetryTailError(RuntimeError):
+    """Raised when the current telemetry tail cannot safely anchor a new hashed event."""
+
+    def __init__(self, reason: str, message: str) -> None:
+        super().__init__(message)
+        self.reason = reason
+
+
 class TelemetryLogger:
     """Append-only telemetry logger with local summary export helpers."""
 
     def __init__(self, events_path: Path, repo_root: Path) -> None:
         self.events_path = events_path
         self.events_path.parent.mkdir(parents=True, exist_ok=True)
+        self.lock_path = self.events_path.parent / f"{self.events_path.name}.lock"
         self.build = BuildInfo(
             runner_version=detect_runner_version(),
             git_sha=detect_git_sha(repo_root),
             python_version=sys.version.split()[0],
             platform=platform.platform(),
         )
-        self._last_hash = self._derive_last_hash()
 
     def _normalize_source(self, source: str) -> str:
         if source in VALID_SOURCES:
             return source
         return "cli"
 
-    def _derive_last_hash(self) -> str:
-        prev_hash = GENESIS_PREV_HASH
-        if not self.events_path.exists():
-            return prev_hash
-        with self.events_path.open("r", encoding="utf-8") as handle:
-            for line in handle:
-                line = line.strip()
-                if not line:
-                    continue
+    @contextmanager
+    def _events_lock(self) -> Any:
+        """Acquire a cross-process lock used by all telemetry file writers/readers."""
+
+        self.lock_path.parent.mkdir(parents=True, exist_ok=True)
+        with self.lock_path.open("a+b") as lock_handle:
+            if os.name == "nt":
+                lock_handle.seek(0, os.SEEK_END)
+                if lock_handle.tell() == 0:
+                    lock_handle.write(b"\0")
+                    lock_handle.flush()
+                lock_handle.seek(0)
+                msvcrt.locking(lock_handle.fileno(), msvcrt.LK_LOCK, 1)
                 try:
-                    payload = json.loads(line)
-                except json.JSONDecodeError:
-                    continue
-                if not isinstance(payload, dict):
-                    continue
-                prev_hash = _event_hash(prev_hash, payload)
-        return prev_hash
+                    yield lock_handle
+                finally:
+                    lock_handle.seek(0)
+                    msvcrt.locking(lock_handle.fileno(), msvcrt.LK_UNLCK, 1)
+            else:
+                fcntl.flock(lock_handle.fileno(), fcntl.LOCK_EX)
+                try:
+                    yield lock_handle
+                finally:
+                    fcntl.flock(lock_handle.fileno(), fcntl.LOCK_UN)
+
+    def _read_last_nonempty_line(self) -> str | None:
+        """Read the last non-empty JSONL row using end-seek scanning."""
+
+        if not self.events_path.exists():
+            return None
+        with self.events_path.open("rb") as handle:
+            handle.seek(0, os.SEEK_END)
+            file_size = handle.tell()
+            if file_size == 0:
+                return None
+
+            scan = file_size - 1
+            while scan >= 0:
+                handle.seek(scan)
+                char = handle.read(1)
+                if char not in {b"\n", b"\r"}:
+                    break
+                scan -= 1
+            if scan < 0:
+                return None
+
+            line_end = scan
+            line_start = 0
+            while scan > 0:
+                scan -= 1
+                handle.seek(scan)
+                if handle.read(1) == b"\n":
+                    line_start = scan + 1
+                    break
+
+            handle.seek(line_start)
+            raw_line = handle.read(line_end - line_start + 1)
+            try:
+                text = raw_line.decode("utf-8")
+            except UnicodeDecodeError as exc:
+                raise TelemetryTailError(
+                    "invalid_utf8_tail",
+                    "Telemetry tail is not UTF-8 decodable; rotate telemetry before writing.",
+                ) from exc
+            stripped = text.strip()
+            return stripped or None
+
+    def _tail_event_hash_locked(self) -> str:
+        """Return the last event hash from file tail or genesis when file is empty."""
+
+        last_line = self._read_last_nonempty_line()
+        if last_line is None:
+            return GENESIS_PREV_HASH
+        try:
+            payload = json.loads(last_line)
+        except json.JSONDecodeError as exc:
+            raise TelemetryTailError(
+                "invalid_json_line",
+                "Telemetry tail has invalid JSON; rotate telemetry before writing.",
+            ) from exc
+        if not isinstance(payload, dict):
+            raise TelemetryTailError(
+                "invalid_event_shape",
+                "Telemetry tail is not a JSON object; rotate telemetry before writing.",
+            )
+        if "prev_hash" not in payload or "event_hash" not in payload:
+            raise TelemetryTailError(
+                "missing_hash_fields",
+                "Telemetry tail has missing hash fields; rotate telemetry before writing new events.",
+            )
+        prev_hash = str(payload.get("prev_hash"))
+        event_hash = str(payload.get("event_hash"))
+        expected_hash = _event_hash(prev_hash, payload)
+        if event_hash != expected_hash:
+            raise TelemetryTailError(
+                "event_hash_mismatch",
+                "Telemetry tail hash mismatch; rotate telemetry before writing new events.",
+            )
+        return event_hash
 
     def _append_jsonl(self, payload: dict[str, Any]) -> None:
         self.events_path.parent.mkdir(parents=True, exist_ok=True)
-        payload = dict(payload)
-        payload["prev_hash"] = self._last_hash
-        payload["event_hash"] = _event_hash(self._last_hash, payload)
-        self._last_hash = payload["event_hash"]
-        with self.events_path.open("a", encoding="utf-8", newline="\n") as handle:
-            handle.write(_safe_json(payload))
-            handle.write("\n")
+        with self._events_lock():
+            prev_hash = self._tail_event_hash_locked()
+            row = dict(payload)
+            row["prev_hash"] = prev_hash
+            row["event_hash"] = _event_hash(prev_hash, row)
+            with self.events_path.open("a", encoding="utf-8", newline="\n") as handle:
+                handle.write(_safe_json(row))
+                handle.write("\n")
+                handle.flush()
+                try:
+                    os.fsync(handle.fileno())
+                except OSError:
+                    pass
 
     def _base_event(
         self,
@@ -390,168 +493,180 @@ class TelemetryLogger:
             print(f"[telemetry] failed to append event: {exc}", file=sys.stderr)
 
     def iter_events(self) -> list[dict[str, Any]]:
-        if not self.events_path.exists():
-            return []
-        events: list[dict[str, Any]] = []
-        with self.events_path.open("r", encoding="utf-8") as handle:
-            for line in handle:
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    payload = json.loads(line)
-                except json.JSONDecodeError:
-                    continue
-                if isinstance(payload, dict):
-                    events.append(payload)
-        return events
+        with self._events_lock():
+            if not self.events_path.exists():
+                return []
+            events: list[dict[str, Any]] = []
+            with self.events_path.open("r", encoding="utf-8") as handle:
+                for line in handle:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        payload = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    if isinstance(payload, dict):
+                        events.append(payload)
+            return events
 
     def count_events(self) -> int:
-        if not self.events_path.exists():
-            return 0
-        count = 0
-        with self.events_path.open("r", encoding="utf-8") as handle:
-            for line in handle:
-                if line.strip():
-                    count += 1
-        return count
+        with self._events_lock():
+            if not self.events_path.exists():
+                return 0
+            count = 0
+            with self.events_path.open("r", encoding="utf-8") as handle:
+                for line in handle:
+                    if line.strip():
+                        count += 1
+            return count
 
     def purge(self) -> bool:
-        if not self.events_path.exists():
-            return False
-        self.events_path.unlink()
-        self._last_hash = GENESIS_PREV_HASH
-        return True
+        with self._events_lock():
+            if not self.events_path.exists():
+                return False
+            self.events_path.unlink()
+            return True
 
     def verify_chain(self) -> dict[str, Any]:
         """Verify telemetry hash-chain integrity and report first break, if any."""
 
-        if not self.events_path.exists():
-            return {"ok": True, "checked_events": 0, "broken_index": None, "reason": None}
+        with self._events_lock():
+            if not self.events_path.exists():
+                return {"ok": True, "checked_events": 0, "broken_index": None, "reason": None}
 
-        prev_hash = GENESIS_PREV_HASH
-        checked = 0
-        with self.events_path.open("r", encoding="utf-8") as handle:
-            for line_idx, raw_line in enumerate(handle):
-                line = raw_line.strip()
-                if not line:
-                    continue
-                try:
-                    payload = json.loads(line)
-                except json.JSONDecodeError:
-                    return {
-                        "ok": False,
-                        "checked_events": checked,
-                        "broken_index": line_idx,
-                        "reason": "invalid_json_line",
-                    }
-                if not isinstance(payload, dict):
-                    return {
-                        "ok": False,
-                        "checked_events": checked,
-                        "broken_index": line_idx,
-                        "reason": "invalid_event_shape",
-                    }
-                if "prev_hash" not in payload or "event_hash" not in payload:
-                    return {
-                        "ok": False,
-                        "checked_events": checked,
-                        "broken_index": line_idx,
-                        "reason": "missing_hash_fields",
-                    }
-                expected_prev = str(payload.get("prev_hash"))
-                if expected_prev != prev_hash:
-                    return {
-                        "ok": False,
-                        "checked_events": checked,
-                        "broken_index": line_idx,
-                        "reason": "prev_hash_mismatch",
-                    }
-                expected_hash = _event_hash(prev_hash, payload)
-                event_hash = str(payload.get("event_hash"))
-                if event_hash != expected_hash:
-                    return {
-                        "ok": False,
-                        "checked_events": checked,
-                        "broken_index": line_idx,
-                        "reason": "event_hash_mismatch",
-                    }
-                prev_hash = event_hash
-                checked += 1
-        return {"ok": True, "checked_events": checked, "broken_index": None, "reason": None}
+            prev_hash = GENESIS_PREV_HASH
+            checked = 0
+            with self.events_path.open("r", encoding="utf-8") as handle:
+                for line_idx, raw_line in enumerate(handle):
+                    line = raw_line.strip()
+                    if not line:
+                        continue
+                    try:
+                        payload = json.loads(line)
+                    except json.JSONDecodeError:
+                        return {
+                            "ok": False,
+                            "checked_events": checked,
+                            "broken_index": line_idx,
+                            "reason": "invalid_json_line",
+                        }
+                    if not isinstance(payload, dict):
+                        return {
+                            "ok": False,
+                            "checked_events": checked,
+                            "broken_index": line_idx,
+                            "reason": "invalid_event_shape",
+                        }
+                    if "prev_hash" not in payload or "event_hash" not in payload:
+                        return {
+                            "ok": False,
+                            "checked_events": checked,
+                            "broken_index": line_idx,
+                            "reason": "missing_hash_fields",
+                        }
+                    expected_prev = str(payload.get("prev_hash"))
+                    if expected_prev != prev_hash:
+                        return {
+                            "ok": False,
+                            "checked_events": checked,
+                            "broken_index": line_idx,
+                            "reason": "prev_hash_mismatch",
+                        }
+                    expected_hash = _event_hash(prev_hash, payload)
+                    event_hash = str(payload.get("event_hash"))
+                    if event_hash != expected_hash:
+                        return {
+                            "ok": False,
+                            "checked_events": checked,
+                            "broken_index": line_idx,
+                            "reason": "event_hash_mismatch",
+                        }
+                    prev_hash = event_hash
+                    checked += 1
+            return {"ok": True, "checked_events": checked, "broken_index": None, "reason": None}
 
     def purge_older_than(self, older_than: timedelta) -> dict[str, Any]:
         """Purge telemetry events older than a relative threshold and keep chain valid."""
 
         if older_than <= timedelta(0):
             raise ValueError("older_than must be positive.")
-        if not self.events_path.exists():
-            return {
-                "path": str(self.events_path),
-                "purged_count": 0,
-                "kept_count": 0,
-                "archive_path": None,
-                "archive_sha256": None,
-            }
+        with self._events_lock():
+            if not self.events_path.exists():
+                return {
+                    "path": str(self.events_path),
+                    "purged_count": 0,
+                    "kept_count": 0,
+                    "archive_path": None,
+                    "archive_sha256": None,
+                }
 
-        cutoff = _utc_now() - older_than
-        kept: list[dict[str, Any]] = []
-        purged: list[dict[str, Any]] = []
-        with self.events_path.open("r", encoding="utf-8") as handle:
-            for line in handle:
-                line = line.strip()
-                if not line:
-                    continue
+            cutoff = _utc_now() - older_than
+            kept: list[dict[str, Any]] = []
+            purged: list[dict[str, Any]] = []
+            with self.events_path.open("r", encoding="utf-8") as handle:
+                for line in handle:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        payload = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    if not isinstance(payload, dict):
+                        continue
+                    parsed_ts = _parse_ts(payload.get("ts"))
+                    if parsed_ts is None:
+                        kept.append(payload)
+                        continue
+                    if parsed_ts < cutoff:
+                        purged.append(payload)
+                    else:
+                        kept.append(payload)
+
+            if not purged:
+                return {
+                    "path": str(self.events_path),
+                    "purged_count": 0,
+                    "kept_count": len(kept),
+                    "archive_path": None,
+                    "archive_sha256": None,
+                }
+
+            archive_dir = self.events_path.parent / "archive"
+            archive_dir.mkdir(parents=True, exist_ok=True)
+            stamp = _utc_now().strftime("%Y%m%dT%H%M%SZ")
+            archive_path = archive_dir / f"events-purged-{stamp}.jsonl"
+            with archive_path.open("w", encoding="utf-8", newline="\n") as handle:
+                for item in purged:
+                    handle.write(_safe_json(item))
+                    handle.write("\n")
+            archive_sha256 = hashlib_sha256_hex(archive_path.read_text(encoding="utf-8"))
+
+            prev_hash = GENESIS_PREV_HASH
+            with self.events_path.open("w", encoding="utf-8", newline="\n") as handle:
+                for item in kept:
+                    row = dict(item)
+                    row.pop("prev_hash", None)
+                    row.pop("event_hash", None)
+                    row["prev_hash"] = prev_hash
+                    row["event_hash"] = _event_hash(prev_hash, row)
+                    prev_hash = str(row["event_hash"])
+                    handle.write(_safe_json(row))
+                    handle.write("\n")
+                handle.flush()
                 try:
-                    payload = json.loads(line)
-                except json.JSONDecodeError:
-                    continue
-                if not isinstance(payload, dict):
-                    continue
-                parsed_ts = _parse_ts(payload.get("ts"))
-                if parsed_ts is None:
-                    kept.append(payload)
-                    continue
-                if parsed_ts < cutoff:
-                    purged.append(payload)
-                else:
-                    kept.append(payload)
+                    os.fsync(handle.fileno())
+                except OSError:
+                    pass
 
-        if not purged:
             return {
                 "path": str(self.events_path),
-                "purged_count": 0,
+                "purged_count": len(purged),
                 "kept_count": len(kept),
-                "archive_path": None,
-                "archive_sha256": None,
+                "archive_path": str(archive_path),
+                "archive_sha256": archive_sha256,
             }
-
-        archive_dir = self.events_path.parent / "archive"
-        archive_dir.mkdir(parents=True, exist_ok=True)
-        stamp = _utc_now().strftime("%Y%m%dT%H%M%SZ")
-        archive_path = archive_dir / f"events-purged-{stamp}.jsonl"
-        with archive_path.open("w", encoding="utf-8", newline="\n") as handle:
-            for item in purged:
-                handle.write(_safe_json(item))
-                handle.write("\n")
-        archive_sha256 = hashlib_sha256_hex(archive_path.read_text(encoding="utf-8"))
-
-        self._last_hash = GENESIS_PREV_HASH
-        with self.events_path.open("w", encoding="utf-8", newline="\n"):
-            pass
-        for item in kept:
-            row = dict(item)
-            row.pop("prev_hash", None)
-            row.pop("event_hash", None)
-            self._append_jsonl(row)
-
-        return {
-            "path": str(self.events_path),
-            "purged_count": len(purged),
-            "kept_count": len(kept),
-            "archive_path": str(archive_path),
-            "archive_sha256": archive_sha256,
-        }
 
     def export_summary(
         self,

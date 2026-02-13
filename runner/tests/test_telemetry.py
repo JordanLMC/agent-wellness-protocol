@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import multiprocessing as mp
 import os
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
@@ -22,6 +23,19 @@ def _read_jsonl(path: Path) -> list[dict]:
             continue
         rows.append(json.loads(line))
     return rows
+
+
+def _concurrent_writer_worker(events_path: str, repo_root: str, worker_id: int, count: int) -> None:
+    logger = TelemetryLogger(events_path=Path(events_path), repo_root=Path(repo_root))
+    for idx in range(count):
+        logger.log_event(
+            "runner.started",
+            actor="agent",
+            actor_id=f"worker:{worker_id}",
+            source="api",
+            trace_id=f"api:worker-{worker_id}-{idx}",
+            data={"worker_id": worker_id, "event_index": idx},
+        )
 
 
 def test_sanitize_redacts_secret_like_values() -> None:
@@ -332,6 +346,59 @@ def test_hash_chain_verify_detects_tampering(tmp_path: Path) -> None:
     result = logger.verify_chain()
     assert result["ok"] is False
     assert result["reason"] == "event_hash_mismatch"
+
+
+def test_hash_chain_verify_reports_missing_hash_fields_for_legacy_tail(tmp_path: Path) -> None:
+    events_path = tmp_path / "telemetry" / "events.jsonl"
+    events_path.parent.mkdir(parents=True, exist_ok=True)
+    legacy_row = {
+        "schema_version": "0.1",
+        "event_id": "legacy-1",
+        "ts": datetime.now(tz=UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+        "event_type": "runner.started",
+        "actor": {"kind": "system", "id": "legacy"},
+        "source": "cli",
+        "trace_id": "cli:legacy",
+        "build": {},
+        "data": {"note": "legacy row without hashes"},
+    }
+    events_path.write_text(json.dumps(legacy_row) + "\n", encoding="utf-8")
+
+    logger = TelemetryLogger(events_path=events_path, repo_root=_repo_root())
+    verify = logger.verify_chain()
+    assert verify["ok"] is False
+    assert verify["reason"] == "missing_hash_fields"
+
+    before = events_path.read_text(encoding="utf-8")
+    logger.log_event("runner.started", actor="system", source="cli", data={"session": "new"})
+    after = events_path.read_text(encoding="utf-8")
+    assert after == before
+
+
+def test_hash_chain_survives_concurrent_writers(tmp_path: Path) -> None:
+    events_path = tmp_path / "telemetry" / "events.jsonl"
+    events_path.parent.mkdir(parents=True, exist_ok=True)
+
+    worker_count = 4
+    events_per_worker = 20
+    ctx = mp.get_context("spawn")
+    workers: list[mp.Process] = []
+    for worker_id in range(worker_count):
+        process = ctx.Process(
+            target=_concurrent_writer_worker,
+            args=(str(events_path), str(_repo_root()), worker_id, events_per_worker),
+        )
+        process.start()
+        workers.append(process)
+
+    for process in workers:
+        process.join(timeout=30)
+        assert process.exitcode == 0
+
+    logger = TelemetryLogger(events_path=events_path, repo_root=_repo_root())
+    verify = logger.verify_chain()
+    assert verify["ok"] is True
+    assert verify["checked_events"] == worker_count * events_per_worker
 
 
 def test_purge_older_than_archives_and_keeps_chain_valid(tmp_path: Path) -> None:
