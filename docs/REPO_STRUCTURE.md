@@ -1,7 +1,7 @@
 # REPO_STRUCTURE.md
 Version: v0.1  
 Status: Draft  
-Last updated: 2026-02-11  
+Last updated: 2026-02-13  
 Owner: Project Team  
 
 ## Purpose
@@ -32,6 +32,10 @@ Define a repo layout that:
     CONTRIBUTING.md
     TELEMETRY.md
     PACKS.md
+    SETUP.md
+    SETUP_MAC.md
+    SETUP_WINDOWS.md
+    OPENCLAW_TESTING.md
 
   /research/
     *.pdf                     # local research artifacts for quest and pillar design
@@ -131,6 +135,10 @@ Must answer in 60 seconds:
 - how to run daily wellness in Safe Mode
 - what “Authorized Mode” means
 - how to install quest packs
+
+### Setup docs
+- `docs/SETUP.md` is the setup source of truth.
+- `docs/SETUP_MAC.md` and `docs/SETUP_WINDOWS.md` provide platform-specific steps.
 
 ### SECURITY.md
 - reporting process
