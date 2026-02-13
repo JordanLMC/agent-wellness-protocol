@@ -10,6 +10,12 @@ ClawSpa is a local-first Agent Wellness System for persistent, identity-bearing,
 - `runner/`: local runner CLI + localhost API
 - `mcp-server/`: thin MCP wrapper over the local API
 
+## Quickstart: macOS / Windows
+
+- Setup overview (single source of truth): `docs/SETUP.md`
+- macOS setup: `docs/SETUP_MAC.md`
+- Windows setup (WSL2 + PowerShell): `docs/SETUP_WINDOWS.md`
+
 ## Safety posture
 
 - Default is Safe Mode.

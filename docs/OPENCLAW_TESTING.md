@@ -8,6 +8,13 @@ Owner: Project Team
 
 Provide a practical local runbook for OpenClaw/Moltfred testing against the ClawSpa runner API and telemetry workflow.
 
+## Host setup first
+
+Before running this test guide, complete host setup:
+- Setup overview: `docs/SETUP.md`
+- macOS host: `docs/SETUP_MAC.md`
+- Windows host (WSL2 + PowerShell): `docs/SETUP_WINDOWS.md`
+
 ## Header conventions
 
 Use these headers for API calls:
